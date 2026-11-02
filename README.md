@@ -13,7 +13,10 @@ Built with Claude (Anthropic) as the AI pair-programmer. Academic exercise, not 
   - **Stock:** −100% (short) to +150% (long on margin) of equity.
   - **Options:** one-month European calls and puts at 90/95/100/105/110% strikes. Writes must be covered or cash-secured.
 - At the end the stock is revealed and you're scored on **Sharpe ratio, maximum drawdown and IRR**, plus Sortino, volatility and beta. Six auto-played benchmarks run on the same data with the same costs: buy & hold, the S&P 500, a covered call, a protective put, a 200-day trend rule, and T-bills.
-- A **coach's debrief** explains what drove your result. A **replay link** lets anyone reproduce your exact game.
+- A **coach's debrief** explains what drove your result. A **replay link** lets anyone reproduce your exact game, and a **challenge link** lets a friend play the same blind tape and be ranked against you.
+- Each month the order ticket shows your position before and after the order, the bar at the bottom names the action ("Hold, go to month 4" or "Trade and go to month 4"), and a one-line summary follows every month. Tap a bid to sell an option or an ask to buy it.
+- A blind game ends with a short reveal (the name and dates come out, then your verdict in words). It is skippable and turns off with the system's reduce-motion setting.
+- The game in progress is kept in your browser, so a reload picks up where you left off.
 
 Full rules, the option-pricing model and the metric definitions are on the site's *How it works* page.
 
@@ -40,7 +43,7 @@ site/ (static) ──► loads data/*.json ──► the game window always ends
 |---|---|
 | `site/index.html`, `site/app.js`, `site/ui/` | UI: vanilla ES modules, no build step |
 | `site/engine/` | Pure-JS engine: `game.js` (rules, margin, settlement), `options.js` (Black-Scholes, IV model, spreads), `market.js` (alignment, realized vol, SMA), `metrics.js` (Sharpe, Sortino, MDD, XIRR, beta), `strategies.js` (benchmarks), `coach.js`, `replay.js`, `rng.js` |
-| `site/vendor/` | uPlot 1.6.32 (MIT), vendored so the site has no CDN dependency |
+| `site/vendor/` | uPlot 1.6.32 (MIT) and the Public Sans and IBM Plex Mono fonts (SIL OFL 1.1, licenses alongside), self-hosted so the site has no CDN dependency |
 | `site/data/` | Price data written by the workflow |
 | `scripts/fetch_data.py` | Downloader and validator |
 | `.github/workflows/` | `update-data.yml` (fetch, validate, commit data), `ci.yml` (unit tests on every push) |

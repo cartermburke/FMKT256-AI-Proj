@@ -223,16 +223,18 @@ story.append(PageBreak())
 # ----------------------------------------------------------------------------- page 2
 
 story += [P("Playing a month", "h1"),
-          P("The left side shows the price history (up to a year before the start, plus every month played so far) "
-            "with the 200-day average, and the account's daily marked-to-market equity next to simply holding the "
-            "stock. The order ticket on the right sets the stock position and lists live option quotes at five "
-            "strikes. Every order is checked before it can be submitted, and the ticket previews cash, costs and "
-            "exposure."),
+          P("The bar across the top leads with the account's value and return, then the month and the net exposure. "
+            "The price chart shows up to a year before the start plus every month played so far, with the 200-day "
+            "average and a marker wherever the player traded; below it, the account's daily value runs next to simply "
+            "holding the stock. The order ticket on the right sets the stock position and lists live option quotes at "
+            "five strikes: tap a bid to sell or an ask to buy. Every order is checked before it can be submitted, the "
+            "ticket shows each position before and after the order, and the bar at the bottom names the action "
+            "(\u201cHold, go to month 10\u201d or \u201cTrade and go to month 10\u201d) and sums up the month just played."),
           framed(img(SUB / "img" / "game.png", W - 8, max_h=4.15 * inch)), Spacer(1, 6),
           P("Rules", "h2")]
 story += bullets([
     "<b>Turns:</b> 21 trading days each; 60 turns for the full challenge, or a random 12-month slice in a quick round.",
-    "<b>Stock:</b> −100% (short) to +150% (long on margin) of equity; 5 bp per trade.",
+    "<b>Stock:</b> −100% (short) to +150% (long on margin) of equity; each trade costs 0.05% of the amount traded.",
     "<b>Options:</b> one-month European calls and puts at 90, 95, 100, 105 and 110% strikes, cash-settled at expiry. Up to four legs, and at most 200% of equity notional in total. You buy at the ask and sell at the bid.",
     "<b>Leverage includes options:</b> net exposure, meaning the stock plus every option's delta, must stay between −100% and +150% when you place an order.",
     "<b>Writing options:</b> written calls must be covered by shares. Written puts must be cash-secured by the cash left after the whole order.",
@@ -260,7 +262,7 @@ story += [P("The scorecard and the debrief", "h1"),
           P("The prompt judges on Sharpe, maximum drawdown <i>and</i> IRR. Every strategy is ranked on Sharpe, on IRR, and "
             "on return per unit of drawdown: IRR above T-bills ÷ max drawdown, a Calmar-style ratio. That is how max "
             "drawdown enters the score; raw drawdown would reward tiny positions. Strategies are ordered by the "
-            "average of the three ranks (the small # in each cell), and exact ties share a rank. "
+            "average of the three ranks (the small #1, #2 chips beside each value), and exact ties share a place. "
             "<b>Sharpe</b> is the mean daily return in excess of the T-bill rate divided by its standard deviation, "
             "× √252. <b>Max drawdown</b> is the largest peak-to-trough fall in daily equity. <b>IRR</b> is the XIRR of "
             "the account's cash flows. With a fixed stake that is the compound annual growth rate, and the engine "
