@@ -140,7 +140,7 @@ try {
   await page.waitForSelector("#resEquityChart canvas");
   // Player's buy & hold must equal the buy & hold benchmark (ending value column).
   const youRow = await page.locator("#scoreTable tr.you td").nth(5).textContent();
-  const bhRow = await page.locator("#scoreTable tr", { hasText: "Buy & hold the stock" }).locator("td").nth(5).textContent();
+  const bhRow = await page.locator("#scoreTable tr", { has: page.locator('td.name[title="Buy & hold the stock"]') }).locator("td").nth(5).textContent();
   check(youRow === bhRow, `autopilot buy & hold matches the benchmark (${youRow} vs ${bhRow})`);
   await page.screenshot({ path: OUT + "06-results-full.png", fullPage: true });
 

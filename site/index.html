@@ -282,7 +282,7 @@
 
       <h2>Limitations</h2>
       <ul>
-        <li>Option prices are model prices, not historical quotes. There is no volatility skew, so out-of-the-money puts are likely <em>cheaper</em> here than they were in real markets.</li>
+        <li>Option prices are model prices, not historical quotes. The smile is a simple two-parameter shape (one skew for the index, one for all single stocks), not fitted to each stock's real option market, and earnings-day volatility isn't modelled.</li>
         <li>Trades execute at the daily close. There are no intraday stops, and decisions are monthly.</li>
         <li>Fractional shares are allowed, and the market impact of trades is ignored beyond the fixed costs.</li>
         <li>Pre-start history shown on the chart starts up to a year before the game begins. In blind mode the stock's identity can sometimes be inferred from the shape of its chart, or from the era revealed by the T-bill rate. Blind mode is honour-based: a static site has to download the price file, so a player who opens the browser's developer tools can see it.</li>

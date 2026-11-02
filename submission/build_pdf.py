@@ -181,17 +181,16 @@ story += [P("What we built", "h1"),
             "The game steps through the <b>most recent five years</b> of daily prices one month at a time. Each month the "
             "player sets a long or short stock position and can trade one-month <b>calls and puts</b>. At the end the "
             "stock is revealed and the player is scored on <b>Sharpe ratio, maximum drawdown and IRR</b>, the criteria "
-            "named in the prompt. The score is set against five autopilot strategies played on the same data with the "
+            "named in the prompt. The score is set against six benchmark strategies played on the same data with the "
             "same costs."),
           P("How it meets the prompt", "h2")]
 story += bullets([
-    "<b>Trading game:</b> fixed stake, one stock plus its derivatives over a fixed five-year period, judged on Sharpe, max drawdown and IRR (plus Sortino, volatility and beta).",
+    "<b>Trading game:</b> fixed stake, one stock plus its derivatives over a fixed five-year period, judged on Sharpe, max drawdown and IRR. The overall rank is the average of the three ranks; Sortino, volatility and beta are also reported.",
     f"<b>Imports historical data:</b> about 7 years of daily adjusted closes for {n_stocks} instruments, the VIX and the 13-week T-bill yield, downloaded by code (yfinance with fallbacks) and validated before use.",
     f"<b>Updates when new data arrive:</b> a scheduled GitHub Actions job runs every weekday after the close, appends the new bar, commits it and redeploys the site. The five-year window always ends at the latest close (currently {as_of_txt}).",
     "<b>Repeatable without coding:</b> adding a stock to the game is one line in <font name='Mono'>config/tickers.json</font>; the next run downloads its history automatically.",
     "<b>No logins:</b> the game, the code and the data history are all public pages.",
 ])
-story += [Spacer(1, 2), framed(img(SUB / "img" / "reveal.png", W - 8, max_h=1.45 * inch))]
 story.append(PageBreak())
 
 # ----------------------------------------------------------------------------- page 2
@@ -202,16 +201,17 @@ story += [P("Playing a month", "h1"),
             "stock. The order ticket on the right sets the stock position and lists live option quotes at five "
             "strikes. Every order is checked before it can be submitted, and the ticket previews cash, costs and "
             "exposure."),
-          framed(img(SUB / "img" / "game.png", W - 8, max_h=4.6 * inch)), Spacer(1, 8),
+          framed(img(SUB / "img" / "game.png", W - 8, max_h=4.15 * inch)), Spacer(1, 6),
           P("Rules", "h2")]
 story += bullets([
     "<b>Turns:</b> 21 trading days each; 60 turns for the full challenge, or a random 12-month slice in a quick round.",
     "<b>Stock:</b> −100% (short) to +150% (long on margin) of equity; 5 bp per trade.",
-    "<b>Options:</b> one-month European calls and puts at 90, 95, 100, 105 and 110% strikes, cash-settled at expiry. You buy at the ask and sell at the bid.",
-    "<b>Writing options:</b> written calls must be covered by shares; written puts must be cash-secured.",
-    "<b>Financing:</b> cash earns the T-bill rate daily, margin debit pays T-bill + 1.5%, shorts pay 0.5% a year to borrow, and borrowing is capped at 50% of equity.",
-    "<b>Risk controls:</b> margin is checked at every daily close. Equity below 25% of the gross stock position forces liquidation, and equity at zero ends the game.",
-    "<b>Autopilot and replays:</b> an autopilot can finish the game with any benchmark rule, and every game produces a replay link that reproduces it exactly.",
+    "<b>Options:</b> one-month European calls and puts at 90, 95, 100, 105 and 110% strikes, cash-settled at expiry. Up to four legs, and at most 200% of equity notional in total. You buy at the ask and sell at the bid.",
+    "<b>Leverage includes options:</b> net exposure, meaning the stock plus every option's delta, must stay between −100% and +150% when you place an order.",
+    "<b>Writing options:</b> written calls must be covered by shares. Written puts must be cash-secured by the cash left after the whole order.",
+    "<b>Financing:</b> cash earns the T-bill rate daily, margin debit pays T-bill + 1.5%, shorts pay 0.5% a year to borrow, and an order can't take borrowing above 50% of equity.",
+    "<b>Drift and risk controls:</b> limits apply to orders, and you can always hold a position the market has pushed past them. Margin is checked at every daily close, expiry days included. Equity below 25% of the gross stock position forces liquidation, and equity at zero ends the game.",
+    "<b>Autopilot and replays:</b> an autopilot can finish the game with any benchmark rule. Every game produces a replay link that reproduces it exactly on the same data snapshot.",
 ])
 story.append(PageBreak())
 
@@ -225,24 +225,28 @@ story += [P("The scorecard and the debrief", "h1"),
             f"The stock turned out to be <b>{info.get(demo['symbol'], {}).get('name', demo['symbol'])} ({demo['symbol']})</b>. "
             f"The scripted player had a Sharpe ratio of <b>{you['sharpe']:.2f}</b> vs {bh['sharpe']:.2f} for buy &amp; hold, "
             f"a max drawdown of <b>{you['maxDrawdown'] * 100:.0f}%</b> vs {bh['maxDrawdown'] * 100:.0f}%, and an IRR of "
-            f"<b>{you['irr'] * 100:.1f}%</b> vs {bh['irr'] * 100:.1f}%. The same rule loses to buy &amp; hold on most "
-            "other stocks (next page), which is part of the lesson."),
+            f"<b>{you['irr'] * 100:.1f}%</b> vs {bh['irr'] * 100:.1f}%. Run on every stock in the pool, the same rule beat "
+            f"buy &amp; hold on all three metrics for only {sum(a['beatAll'] for a in demo['across'])} of "
+            f"{len(demo['across'])} ({', '.join(a['symbol'] for a in demo['across'] if a['beatAll'])}). That is the "
+            "lesson the game teaches."),
           framed(img(SUB / "img" / "scorecard.png", W - 8, max_h=3.6 * inch)), Spacer(1, 8),
-          P("Each row is ranked by Sharpe ratio. <b>Sharpe</b> is the mean daily return in excess of the T-bill rate "
-            "divided by its standard deviation, × √252. <b>Max drawdown</b> is the largest peak-to-trough fall in "
-            "daily equity. <b>IRR</b> is the XIRR of the account's cash flows. With a fixed stake that is the compound "
-            "annual growth rate, and the engine computes a general XIRR so contributions could be added. A rule-based "
-            "coach then explains the result: market timing, shorts, options P&amp;L, frictions, and the comparison with "
-            "the benchmarks."),
+          P("The prompt judges on Sharpe, maximum drawdown <i>and</i> IRR, so every strategy is ranked on each of the "
+            "three (the small # in each cell) and ordered by the average of the three ranks. "
+            "<b>Sharpe</b> is the mean daily return in excess of the T-bill rate divided by its standard deviation, "
+            "× √252. <b>Max drawdown</b> is the largest peak-to-trough fall in daily equity. <b>IRR</b> is the XIRR of "
+            "the account's cash flows. With a fixed stake that is the compound annual growth rate, and the engine "
+            "computes a general XIRR so contributions could be added. A wiped-out account has no meaningful Sharpe "
+            "and ranks last. A rule-based coach then explains the result: market timing (net of option delta), "
+            "shorts, options P&amp;L by what was bought or written, frictions, and the overall placing."),
           framed(img(SUB / "img" / "coach.png", W - 8, max_h=2.7 * inch))]
 story.append(PageBreak())
 
 # ----------------------------------------------------------------------------- page 4
 
 story += [P("What five years of real data say about the benchmarks", "h1"),
-          P(f"Every game is benchmarked against five rules. Here they are on the full five-year window for every "
-            f"instrument in the pool (data through {as_of_txt}). Cells show the Sharpe ratio; the best in each row is "
-            "bold. The last two columns are for buy &amp; hold.")]
+          P(f"Every game is benchmarked against six strategies. Here are the five risky ones on the full five-year window "
+            f"for every instrument in the pool (data through {as_of_txt}); T-bills only always has a Sharpe of 0. Cells "
+            "show the Sharpe ratio, with the best in each row in bold. The last two columns are for buy &amp; hold.")]
 hdr = ["Stock", "Regime", "Buy &amp; hold", "Covered call", "Protective put", "200-day trend", "S&amp;P 500", "B&amp;H max DD", "B&amp;H IRR"]
 rows = [[P(h, "cellb") for h in hdr]]
 keys = ["buyHold", "coveredCall", "protectivePut", "trend200", "spy"]
@@ -268,18 +272,43 @@ bt = Table(rows, colWidths=[c * inch * scale for c in cw], repeatRows=1)
 bt.setStyle(TableStyle([("LINEBELOW", (0, 0), (-1, 0), 0.8, INK2), ("LINEBELOW", (0, 1), (-1, -1), 0.4, GRID),
                         ("ALIGN", (2, 0), (-1, -1), "RIGHT"), ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
                         ("TOPPADDING", (0, 0), (-1, -1), 3), ("BOTTOMPADDING", (0, 0), (-1, -1), 3)]))
-story += [bt, Spacer(1, 8), P("Takeaways", "h2")]
+story += [bt, Spacer(1, 8), P("Takeaways (computed from the table)", "h2")]
 n = len(rows) - 1
+
+
+def names(k, metric, better):
+    out = []
+    for sym in meta["pool"]:
+        s_ = by.get(sym)
+        if not s_:
+            continue
+        a, b = s_[k][metric], s_["buyHold"][metric]
+        if (a > b + 1e-12) if better == "high" else (a < b - 1e-12):
+            out.append(sym)
+    return out
+
+
+def lst(xs):
+    return ", ".join(xs) if xs else "none"
+
+
+cc_sh, cc_tr = names("coveredCall", "sharpe", "high"), names("coveredCall", "totalReturn", "high")
+pp_sh, pp_dd = names("protectivePut", "sharpe", "high"), names("protectivePut", "maxDrawdown", "low")
+tr_sh, tr_dd = names("trend200", "sharpe", "high"), names("trend200", "maxDrawdown", "low")
+bests = set()
+for sym in meta["pool"]:
+    s_ = by.get(sym)
+    if s_:
+        bests.add(max(keys, key=lambda k: s_[k]["sharpe"]))
 story += bullets([
-    f"<b>Covered calls</b> beat buy &amp; hold on Sharpe for {wins['coveredCall']} of {n} instruments. They win on "
-    "low-volatility names and the index, where option premiums carry the most variance risk premium, and lag badly "
-    "on the big trenders, whose upside they cap.",
-    f"<b>Protective puts</b> improved Sharpe for {wins['protectivePut']} of {n}. Insurance helps in crashes but costs "
-    "time value every month.",
-    f"<b>The 200-day trend rule</b> improved Sharpe for {wins['trend200']} of {n}, usually by cutting drawdowns in long "
-    "declines rather than by adding return.",
-    "No single rule dominates, so a human who reads the tape well can beat all five. That is what makes the game worth "
-    "playing.",
+    f"<b>Covered calls</b> beat buy &amp; hold on Sharpe for {len(cc_sh)} of {n} ({lst(cc_sh)}), but on total return "
+    f"for only {len(cc_tr)} ({lst(cc_tr)}). Selling the upside smooths the ride but costs return in a strong market.",
+    f"<b>Protective puts</b> beat buy &amp; hold on Sharpe for {len(pp_sh)} of {n} ({lst(pp_sh)}) and cut the maximum "
+    f"drawdown for {len(pp_dd)} of {n}. Insurance has a monthly cost.",
+    f"<b>The 200-day trend rule</b> beat buy &amp; hold on Sharpe for {len(tr_sh)} of {n} ({lst(tr_sh)}) and cut the "
+    f"maximum drawdown for {len(tr_dd)} of {n}. It helps most in long declines.",
+    f"<b>No single rule dominates:</b> {len(bests)} different strategies top the Sharpe column across the {n} "
+    "instruments. So there is room for a player who reads the tape well, and that is what makes the game worth playing.",
 ])
 story.append(PageBreak())
 
@@ -320,26 +349,33 @@ story += [P("How it works under the hood", "h1"), P("Data pipeline: historical i
           P("Pricing options without historical option quotes", "h2"),
           P("Free historical option chains for every stock don't exist, so options are priced with Black-Scholes on an "
             "implied volatility built from market data on each day:"),
-          P("IV² = RV<sub>63</sub>(stock)² + [ (VIX / 100)² − RV<sub>63</sub>(S&amp;P 500)² ]", "formula"),
+          P("IV<sub>atm</sub>² = RV<sub>63</sub>(stock)² + [ (0.88 · VIX / 100)² − RV<sub>63</sub>(S&amp;P 500)² ]<br/>"
+            "IV(K) = IV<sub>atm</sub> · (1 − skew · ln(K / S))", "formula"),
           P("RV<sub>63</sub> is trailing 63-day realized volatility. The bracket is the market's variance risk premium "
-            "that day: what investors pay for S&amp;P 500 volatility beyond what the index is delivering. This prices "
-            "SPY options exactly at the VIX and gives single stocks a modest premium over their own realized vol. "
-            "<b>We changed this model during the build.</b> The first version multiplied each stock's realized vol by "
-            "the index's VIX-to-realized ratio. Running the benchmarks on real data showed covered calls beating buy "
-            "&amp; hold on almost every stock (TSLA +197% vs +32%), which doesn't happen in real markets, because the "
-            "volatility risk premium is concentrated in index options. The additive model fixed it."),
+            "that day: what investors pay for S&amp;P 500 volatility beyond what the index is delivering. It is "
+            "measured at the money, because the VIX is a variance-swap level that sits above at-the-money vol. "
+            "A smile then makes out-of-the-money puts richer and calls cheaper, with skew 3.0 for the index and "
+            "1.25 for single stocks. "
+            "<b>We changed this model twice, both times because the results failed a reality check.</b> Version 1 "
+            "multiplied each stock's realized vol by the index's VIX-to-realized ratio, and covered calls beat buy "
+            "&amp; hold on almost every stock (TSLA +197% vs +32%). Version 2 priced every strike at the VIX level, and "
+            "the AI review caught a 5%-out-of-the-money SPY covered call beating SPY by 46 points. Real buy-write "
+            "indexes trailed the S&amp;P 500 in this bull market. Version 3, shown here, brings the SPY buy-write "
+            "roughly in line with SPY."),
           P("Verification", "h2")]
 story += bullets([
     f"<b>{unit_pass} unit tests</b> ({unit_fail} failing) on the engine: Black-Scholes textbook values and put-call parity, "
-    "the IV model, option settlement, covered and cash-secured rules, margin calls, short squeezes, interest accrual, "
-    "and the Sharpe, Sortino, drawdown and XIRR math. They run on every push in GitHub Actions.",
+    "the IV model and smile, option settlement, the leverage, covered-call and cash-secured rules, margin calls, "
+    "short squeezes, busts, interest accrual, the autopilot, the ranking, and the Sharpe, Sortino, drawdown and "
+    "XIRR math. They run on every push in GitHub Actions.",
     f"<b>Independent cross-check:</b> a separate Python/pandas script recomputed {xc_metrics} metrics on "
     f"{xc_curves} real five-year equity curves (every benchmark on every stock): <b>{xc_bad} mismatches</b> beyond 1e-6.",
     f"<b>End-to-end browser test:</b> {e2e['passed']} of {e2e['passed'] + e2e['failed']} checks pass. It plays games through the real "
-    "UI in Chromium: valid and invalid orders, autopilot, the reveal, the replay link reproducing the exact result, "
-    "the data page, dark mode and a phone-sized screen, with no console errors.",
-    "<b>Adversarial review:</b> separate AI agents audited the finance math, tried to break the game, and played it "
-    "as a first-time user. Their verified findings were fixed (next page).",
+    "UI in Chromium: valid and invalid orders, attempts to get around the leverage limits, autopilot after a levered "
+    "month, the reveal, the replay link reproducing the exact result, a rejected bad replay link, the data page, "
+    "dark mode and a phone-sized screen, with no console errors.",
+    "<b>Adversarial review:</b> four separate AI agents audited the finance math, tried to break the game, played "
+    "it as a first-time user, and looked for gaps. What they found and how we fixed it is on the next page.",
 ])
 story.append(PageBreak())
 
@@ -352,10 +388,10 @@ if ai.get("fixes"):
     story += bullets(ai["fixes"])
 story += [P("Limitations", "h2")]
 story += bullets([
-    "Option prices are model prices, not historical quotes. There is no volatility skew, so out-of-the-money puts are probably cheaper here than they were in real markets.",
+    "Option prices are model prices, not historical quotes. The smile is a simple two-parameter shape, not fitted to each stock's real option market, and earnings-day volatility isn't modelled.",
     "Decisions are monthly and fill at the daily close. Fractional shares are allowed, and there is no market impact beyond the fixed costs.",
     "Prices are dividend-adjusted (total return), so options are priced as if the stock paid no dividends.",
-    "In blind mode a well-known stock can sometimes be recognised from the shape of its chart.",
+    "In blind mode a well-known stock can sometimes be recognised from the shape of its chart or the era of its T-bill rate, and a player who opens the browser's developer tools can see the price file.",
 ])
 story += [Spacer(1, 8),
           P("Run it yourself", "h2"),

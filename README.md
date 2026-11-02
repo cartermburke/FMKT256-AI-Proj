@@ -67,7 +67,8 @@ node tests/e2e.mjs                                # Playwright: plays games thro
 
 ## Key modelling choices
 
-- **Implied vol:** `IV² = RV63(stock)² + (VIX/100)² − RV63(SPY)²`. This adds the market's variance risk premium once, in variance units. SPY options are priced at the VIX, and single stocks carry a small premium over realized vol, as in real markets. An earlier multiplicative version made covered calls dominate almost every stock, so it was replaced.
+- **Implied vol:** `IV_atm² = RV63(stock)² + (0.88·VIX/100)² − RV63(SPY)²`, then a smile `IV(K) = IV_atm·(1 − skew·ln(K/S))` with skew 3.0 for the index and 1.25 for single stocks. This adds the market's at-the-money variance risk premium once, in variance units, and prices out-of-the-money puts richer than calls. Two earlier versions failed reality checks and were replaced: one made covered calls dominate almost every stock, and the other let a SPY buy-write beat SPY by 46 points.
+- **Leverage and ranking:** net exposure (stock plus option delta) is capped at −100%/+150% per order, and all option legs together at 200% of equity notional. Written puts must be secured by cash left after the order. The overall rank is the average of the Sharpe, max-drawdown and IRR ranks.
 - **Frictions:**
   - 5 bp on stock trades.
   - Option half-spread of 2.5% of premium, with a minimum of 5 bp of spot.

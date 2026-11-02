@@ -485,8 +485,8 @@ function renderResults() {
     const x = r.results;
     const c = STRAT_COLORS[r.key];
     const sw = c ? `<span class="key" style="background:var(${c})"></span>` : `<span class="key"></span>`;
-    const name = r.key === "you" ? "You" : `<span class="lbl-long">${r.label}</span><span class="lbl-short">${r.short}</span>`;
-    return `<tr class="${r.key === "you" ? "you" : ""}"><td class="num rank">${r.overall}</td><td class="name">${sw}${name}</td>
+    const name = r.key === "you" ? "You" : r.short;
+    return `<tr class="${r.key === "you" ? "you" : ""}"><td class="num rank">${r.overall}</td><td class="name" title="${r.label}">${sw}${name}</td>
       <td class="num">${sharpeTxt(x)}${sup(r.ranks.sharpe)}</td><td class="num">${pct(-x.maxDrawdown, 1)}${sup(r.ranks.maxDrawdown)}</td>
       <td class="num">${pct(x.irr, 1, true)}${sup(r.ranks.irr)}</td>
       <td class="num opt">${money(x.finalValue)}</td><td class="num opt ${signClass(x.totalReturn)}">${pct(x.totalReturn, 1, true)}</td>

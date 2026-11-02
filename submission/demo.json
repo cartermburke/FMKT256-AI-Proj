@@ -3,17 +3,17 @@
   "url": "https://cartermburke.github.io/FMKT256-AI-Proj/#/replay/eyJjIjp7InYiOjEsInN5bSI6IlVCRVIiLCJlbmQiOiIyMDI2LTEwLTMwIiwiZnVsbFR1cm5zIjo2MCwic3RhcnRUdXJuIjowLCJ0dXJucyI6NjAsImJsaW5kIjp0cnVlLCJzZWVkIjoyMDI2MTEwMywibW9kZSI6ImZ1bGwifSwiYSI6W1swLCIiXSxbMCwiIl0sWzAsIiJdLFsyNSwiQlA5NToyNSJdLFsyNSwiQlA5NToyNSJdLFswLCIiXSxbMjUsIkJQOTU6MjUiXSxbMjUsIkJQOTU6MjUiXSxbMjUsIkJQOTU6MjUiXSxbMjUsIkJQOTU6MjUiXSxbMjUsIkJQOTU6MjUiXSxbMjUsIkJQOTU6MjUiXSxbMjUsIkJQOTU6MjUiXSxbMCwiIl0sWzAsIiJdLFsxMDAsIiJdLFsxMDAsIiJdLFsxMDAsIiJdLFsxMDAsIiJdLFsxMDAsIiJdLFsxMDAsIiJdLFsxMDAsIiJdLFsxMDAsIiJdLFsxMDAsIiJdLFsxMDAsIiJdLFsxMDAsIiJdLFsxMDAsIiJdLFsxMDAsIiJdLFsxMDAsIiJdLFsxMDAsIiJdLFsxMDAsIiJdLFsxMDAsIiJdLFsxMDAsIiJdLFswLCIiXSxbMTAwLCIiXSxbMTAwLCIiXSxbMTAwLCIiXSxbMTAwLCIiXSxbMCwiIl0sWzAsIiJdLFsxMDAsIiJdLFsxMDAsIldDMTA1OjEwMCJdLFsxMDAsIldDMTA1OjEwMCJdLFsxMDAsIiJdLFsxMDAsIiJdLFsxMDAsIiJdLFsxMDAsIiJdLFsxMDAsIiJdLFsxMDAsIiJdLFsxMDAsIiJdLFswLCIiXSxbMCwiIl0sWzI1LCJCUDk1OjI1Il0sWzI1LCJCUDk1OjI1Il0sWzAsIiJdLFswLCIiXSxbMCwiIl0sWzAsIiJdLFswLCIiXSxbMCwiIl1dfQ",
   "as_of": "2026-10-30",
   "you": {
-    "finalValue": 191778.44959341,
-    "totalReturn": 0.9177844959341002,
-    "sharpe": 0.476213280708734,
-    "sortino": 0.722241084459928,
-    "maxDrawdown": 0.4167679703831566,
+    "finalValue": 188804.7417537924,
+    "totalReturn": 0.8880474175379238,
+    "sharpe": 0.4648607169274319,
+    "sortino": 0.7042948626680915,
+    "maxDrawdown": 0.41467324351019763,
     "ddFrom": 581,
     "ddTo": 865,
-    "irr": 0.13836727800652776,
-    "cagr": 0.1383672780066727,
-    "vol": 0.2690554748057345,
-    "beta": 0.5601898122287402,
+    "irr": 0.13483228727071034,
+    "cagr": 0.1348322872708212,
+    "vol": 0.26870665118651915,
+    "beta": 0.5580381285839007,
     "dates": [
       "2021-10-22",
       "2021-10-25",
@@ -1278,12 +1278,12 @@
       "2026-10-30"
     ],
     "attr": {
-      "stock": 86602.94399661521,
-      "options": -3668.3145094103365,
-      "interest": 9476.571132784777,
+      "stock": 85979.80117752061,
+      "options": -5907.74566249098,
+      "interest": 9360.025498749514,
       "borrow": 0,
-      "costs": 632.75102657983,
-      "spread": 630.21613327089
+      "costs": 627.3392599867188,
+      "spread": 605.3360476113023
     },
     "events": [],
     "busted": false
@@ -2573,5 +2573,117 @@
     },
     "events": [],
     "busted": false
-  }
+  },
+  "across": [
+    {
+      "symbol": "NVDA",
+      "sharpe": 1.0600077506517374,
+      "bhSharpe": 1.0324598130317455,
+      "mdd": 0.5249932659322735,
+      "bhMdd": 0.6635860027588447,
+      "irr": 0.47966019181089514,
+      "bhIrr": 0.5499957960085029,
+      "beatAll": false
+    },
+    {
+      "symbol": "INTC",
+      "sharpe": 0.14177736734367888,
+      "bhSharpe": 0.34765848962397095,
+      "mdd": 0.5334184883260158,
+      "bhMdd": 0.650741527481421,
+      "irr": 0.013204907842937487,
+      "bhIrr": 0.0756929218044648,
+      "beatAll": false
+    },
+    {
+      "symbol": "PYPL",
+      "sharpe": -0.28335667744850157,
+      "bhSharpe": -0.5296378993342031,
+      "mdd": 0.26248543317428297,
+      "bhMdd": 0.8418732409379526,
+      "irr": -0.0193302102957279,
+      "bhIrr": -0.24778852020616332,
+      "beatAll": true
+    },
+    {
+      "symbol": "MU",
+      "sharpe": 1.0802794958774176,
+      "bhSharpe": 1.1259303359818027,
+      "mdd": 0.4527109867619947,
+      "bhMdd": 0.576444085445486,
+      "irr": 0.5347583350689331,
+      "bhIrr": 0.6767083262492857,
+      "beatAll": false
+    },
+    {
+      "symbol": "TSLA",
+      "sharpe": -0.22423321058964765,
+      "bhSharpe": 0.32696762098841237,
+      "mdd": 0.7319683637837426,
+      "bhMdd": 0.7366087802265788,
+      "irr": -0.13057878231827047,
+      "bhIrr": 0.05646871106851563,
+      "beatAll": false
+    },
+    {
+      "symbol": "KO",
+      "sharpe": 0.5958666229444526,
+      "bhSharpe": 0.6809526765587829,
+      "mdd": 0.16608538879289902,
+      "bhMdd": 0.17285015247418878,
+      "irr": 0.12003538203400563,
+      "bhIrr": 0.147855808182017,
+      "beatAll": false
+    },
+    {
+      "symbol": "XOM",
+      "sharpe": 0.6883334510101736,
+      "bhSharpe": 0.9409090290947728,
+      "mdd": 0.2654205503812105,
+      "bhMdd": 0.20514757863058342,
+      "irr": 0.1756126208148383,
+      "bhIrr": 0.2856446326603336,
+      "beatAll": false
+    },
+    {
+      "symbol": "CRWD",
+      "sharpe": 0.37768639692005734,
+      "bhSharpe": 0.6694734277909206,
+      "mdd": 0.43123370605840705,
+      "bhMdd": 0.6772682197107323,
+      "irr": 0.11566960294491613,
+      "bhIrr": 0.28563659961808685,
+      "beatAll": false
+    },
+    {
+      "symbol": "DIS",
+      "sharpe": -0.7057557644493457,
+      "bhSharpe": -0.24778419132039342,
+      "mdd": 0.45009721414890236,
+      "bhMdd": 0.5518419955630913,
+      "irr": -0.0772645441107376,
+      "bhIrr": -0.07531609699793682,
+      "beatAll": false
+    },
+    {
+      "symbol": "UBER",
+      "sharpe": 0.4648607169274319,
+      "bhSharpe": 0.2975616955869124,
+      "mdd": 0.41467324351019763,
+      "bhMdd": 0.5667132755730617,
+      "irr": 0.13483228727071034,
+      "bhIrr": 0.07424132696324634,
+      "beatAll": true
+    },
+    {
+      "symbol": "SPY",
+      "sharpe": 0.420627822983116,
+      "bhSharpe": 0.5380645619202807,
+      "mdd": 0.16966816192319012,
+      "bhMdd": 0.24509060843457464,
+      "irr": 0.08326429928061477,
+      "bhIrr": 0.12191762187332636,
+      "beatAll": false
+    }
+  ]
 }
