@@ -1,6 +1,6 @@
 name: ci
 
-# Runs the engine unit tests on every push. The site itself is deployed by Vercel,
+# Runs the engine unit tests and the data fetcher's tests on every push. The site itself is deployed by Vercel,
 # which builds every commit on this branch (including the bot's daily data commits).
 on:
   push:
@@ -19,3 +19,16 @@ jobs:
           node-version: "22"
       - name: Engine unit tests
         run: node --test tests/*.test.mjs
+
+  # A job of its own, so a failing engine test never hides the fetcher's result (or the reverse).
+  fetcher:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Data fetcher tests (providers stubbed, no network)
+        run: |
+          pip install --quiet pandas requests
+          python tests/fetch_data_test.py

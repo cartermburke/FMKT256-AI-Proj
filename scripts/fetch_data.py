@@ -15,6 +15,13 @@ Sources, tried in order per symbol:
 Validation (per series): dates strictly increasing, no NaN/inf, prices > 0
 (rates >= 0), no calendar gap > 10 days, enough history for the game window.
 If a refresh fails, the last good file is kept and meta.json is flagged stale.
+
+Yahoo's adjusted history is never rewritten by a fallback provider: if a fallback source
+answers for a series published from Yahoo, only the new days are appended (rescaled to join the
+published prices), so shared replay and challenge links keep reproducing. A series that had to be
+published from a fallback goes back to Yahoo's adjusted history as soon as Yahoo answers again.
+A series never ends earlier than it already did, and the game's as-of date is the last day every
+series has.
 """
 from __future__ import annotations
 
@@ -120,7 +127,12 @@ def from_yahoo_chart(symbol: str, start: dt.date) -> pd.Series:
             res = r.json()["chart"]["result"][0]
             ts = res["timestamp"]
             ind = res["indicators"]
-            vals = (ind.get("adjclose") or [{}])[0].get("adjclose") or ind["quote"][0]["close"]
+            vals = (ind.get("adjclose") or [{}])[0].get("adjclose")
+            if not vals:
+                # Indices pay no dividends, so their plain close is the adjusted close; a stock's isn't.
+                if not symbol.startswith("^"):
+                    raise RuntimeError("no adjusted closes")
+                vals = ind["quote"][0]["close"]
             gmtoff = res.get("meta", {}).get("gmtoffset", 0) or 0
             idx = pd.to_datetime([t + gmtoff for t in ts], unit="s").normalize()
             s = pd.Series(vals, index=idx, dtype="float64").dropna()
@@ -217,7 +229,9 @@ def validate(symbol: str, s: pd.Series, kind: str, min_days: int) -> list[str]:
     return problems
 
 
-def fetch_one(symbol: str, kind: str, start: dt.date, min_days: int) -> tuple[pd.Series, str]:
+def fetch_one(symbol: str, kind: str, start: dt.date, min_days: int, accept=None) -> tuple[pd.Series, str]:
+    """The first source whose answer validates and, if given, passes accept(s, name) -> (s, source),
+    which raises to reject an answer so that the next source is tried."""
     errors = []
     for name, fn in SOURCES:
         try:
@@ -228,11 +242,49 @@ def fetch_one(symbol: str, kind: str, start: dt.date, min_days: int) -> tuple[pd
             probs = validate(symbol, s, kind, min_days)
             if probs:
                 raise RuntimeError("; ".join(probs))
-            return s, name
+            return accept(s, name) if accept else (s, name)
         except Exception as e:  # noqa: BLE001
             errors.append(f"{name}: {str(e)[:160]}")
             log(f"  [{symbol}] {name} failed: {str(e)[:160]}")
     raise RuntimeError(" | ".join(errors))
+
+
+# --------------------------------------------------------------------------- joining providers
+
+YAHOO = ("yfinance", "yahoo-chart")
+
+
+def base_source(source: str) -> str:
+    """The provider the published history came from ("yfinance + nasdaq" -> "yfinance")."""
+    return source.split(" + ")[0]
+
+
+def family(source: str) -> str:
+    b = base_source(source)
+    return "yahoo" if b in YAHOO else b
+
+
+def splice(old_path: Path, new: pd.Series, kind: str, old_source: str, new_source: str) -> tuple[pd.Series, str]:
+    """Keep the published history and append only the days after it from another provider.
+
+    Providers adjust prices differently (Nasdaq's closes carry no dividend adjustment), so
+    replacing the history would shift every shared game on this stock. Prices are rescaled so the
+    new days join the last published close; rates are levels and are appended as they are.
+    """
+    old = json.loads(old_path.read_text())
+    old_s = pd.Series(old["close"], index=pd.to_datetime(old["dates"]), dtype="float64")
+    last = old_s.index[-1]
+    tail = new[new.index > last]
+    if tail.empty:
+        return old_s, old_source
+    if kind != "rate":
+        # Join on the last day both providers have: Yahoo prints some holiday bars (VIX on
+        # Memorial Day) that other providers don't, so that day may be missing from the new one.
+        both = old_s.index.intersection(new.index)
+        if not len(both) or (last - both[-1]).days > 10 or not new.loc[both[-1]] > 0:
+            raise RuntimeError(f"{new_source} has no close near {last.date()} to join its prices to the published ones")
+        tail = tail * (old_s.loc[both[-1]] / new.loc[both[-1]])
+    return pd.concat([old_s, tail]), f"{base_source(old_source)} + {new_source}"
 
 
 # --------------------------------------------------------------------------- main
@@ -244,7 +296,7 @@ def series_payload(symbol: str, name: str, kind: str, source: str, s: pd.Series)
         "name": name,
         "kind": kind,
         "source": source,
-        "adjusted": source in ("yfinance", "yahoo-chart", "tiingo") and kind == "price",
+        "adjusted": base_source(source) in ("yfinance", "yahoo-chart", "tiingo") and kind == "price",
         "dates": [d.strftime("%Y-%m-%d") for d in s.index],
         "close": [round(float(v), nd) for v in s.to_numpy()],
     }
@@ -274,9 +326,26 @@ def main() -> int:
     for symbol, fname, name, kind in targets:
         log(f"Fetching {symbol} ...")
         path = PRICE_DIR / f"{fname}.json"
+        old = old_series.get(fname) if path.exists() else None
+
+        def accept(s, source, old=old, path=path, symbol=symbol, kind=kind):
+            # A series never moves back: links and saves made on the published days stay valid.
+            # Checked on the provider's own answer, so a short fallback answer fails like a short
+            # Yahoo one (and the next provider is tried).
+            if old and s.index[-1].strftime("%Y-%m-%d") < old["last"]:
+                raise RuntimeError(f"{source} ends {s.index[-1].date()}, before the published {old['last']}")
+            # A fallback provider only extends the published history; Yahoo replaces a fallback's.
+            if old and family(source) != "yahoo" and family(source) != family(old.get("source", source)):
+                s, source = splice(path, s, kind, old["source"], source)
+                probs = validate(symbol, s, kind, min_days)
+                if probs:
+                    raise RuntimeError(f"joined to {source}: " + "; ".join(probs))
+            else:
+                s = stabilize(s, path, kind)
+            return s, source
+
         try:
-            s, source = fetch_one(symbol, kind, start, min_days)
-            s = stabilize(s, path, kind)
+            s, source = fetch_one(symbol, kind, start, min_days, accept)
             payload = series_payload(symbol, name, kind, source, s)
             text = json.dumps(payload, separators=(",", ":"))
             if not path.exists() or path.read_text() != text:
@@ -293,10 +362,23 @@ def main() -> int:
             else:
                 log(f"  FAILED with no prior data for {symbol}")
 
-    # The game's "as of" date is the latest date shared by the benchmark and aux series.
-    lasts = [m["last"] for m in series_meta.values() if m.get("symbol") in
-             {cfg.get("benchmark")} | {a["symbol"] for a in cfg.get("aux", [])}]
+    # The game's "as of" date is the last day every series has reached, so a game or link made
+    # today ends on a day every stock has (a stock one day behind would otherwise shift it once
+    # it caught up). It never moves back, or links made on the published date would stop working.
+    # A series that answers without error but stops advancing holds as_of back for every game;
+    # once it is 3 trading days behind the benchmark it is reported, so the data shows as stale.
+    ref = next((m["last"] for m in series_meta.values() if m["symbol"] == cfg.get("benchmark")), None)
+    for m in series_meta.values():
+        if ref and m["last"] < ref and m["symbol"] not in failures:
+            lag = len(pd.bdate_range(m["last"], ref, inclusive="right"))
+            log(f"{m['symbol']} ends {m['last']}, {lag} trading day(s) behind {cfg['benchmark']} ({ref})")
+            if lag >= 3:
+                failures[m["symbol"]] = f"{m['source']} answered but ends {m['last']}, {lag} trading days behind {cfg['benchmark']}"
+    lasts = [m["last"] for m in series_meta.values()]
     as_of = min(lasts) if lasts else None
+    if as_of and old_meta.get("as_of") and as_of < old_meta["as_of"]:
+        log(f"as_of would move back to {as_of}; keeping {old_meta['as_of']}")
+        as_of = old_meta["as_of"]
     today = dt.date.today()
     stale = bool(failures) or (as_of is None) or \
         (today - dt.date.fromisoformat(as_of)).days > 5
