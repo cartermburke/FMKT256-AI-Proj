@@ -38,6 +38,18 @@ const check = (cond, msg) => {
 };
 
 const browser = await chromium.launch();
+// Starting a game over one in progress asks first (a confirm dialog). Every page here says yes,
+// as a player continuing would; a page can set page.answer = false to say no to the next one.
+const dialogs = [];
+const newContext = browser.newContext.bind(browser);
+browser.newContext = async (opts) => {
+  const c = await newContext(opts);
+  c.on("page", (p) => p.on("dialog", (d) => {
+    dialogs.push(d.message());
+    if (p.answer === false) { p.answer = undefined; d.dismiss(); } else d.accept();
+  }));
+  return c;
+};
 try {
   const ctx = await browser.newContext({ viewport: { width: 1360, height: 900 }, colorScheme: "light", reducedMotion: "reduce" });
   await ctx.grantPermissions(["clipboard-read", "clipboard-write"]);
@@ -67,7 +79,7 @@ try {
   await page.screenshot({ path: OUT + "02-game-ticket.png", fullPage: true });
   await page.click("#nextTurn");
   await page.waitForFunction(() => document.querySelector("#sTurn").textContent.startsWith("2 of"));
-  check(!(await page.isHidden("#turnToast")), "month summary toast shown");
+  check(!(await page.isHidden("#turnToast")) && (await page.textContent("#turnToast")).startsWith("Month 1:"), "month summary toast shown");
 
   // Month 2: an invalid order (naked call write while flat) must be blocked.
   await page.click('.quick-btns button[data-x="0"]');
@@ -628,6 +640,29 @@ try {
     else check(m.score && m.h2h && m.keyOnLine, `long one-word challenger name keeps its line key and fits at ${vp.width}px`);
     await wc.close();
   }
+  // On phones a long one-word name wraps inside the word: the scorecard is no wider than with a
+  // short name, so the judged metrics stay in view.
+  {
+    const code = wordUrl.split("#/challenge/")[1];
+    const j = JSON.parse(Buffer.from(code, "base64url").toString());
+    j.c.by = "Grant";
+    const shortUrl = `${wordUrl.split("#/challenge/")[0]}#/challenge/${Buffer.from(JSON.stringify(j)).toString("base64url")}`;
+    for (const w of [375, 390]) {
+      const widths = [];
+      for (const u of [wordUrl, shortUrl]) {
+        const nc = await browser.newContext({ viewport: { width: w, height: 800 }, isMobile: true, hasTouch: true, reducedMotion: "reduce" });
+        const np = await nc.newPage();
+        np.on("pageerror", (e) => errors.push(String(e)));
+        await np.goto(u);
+        await np.waitForSelector("#priceChart canvas");
+        await autopilot(np, "buyHold");
+        await np.waitForSelector("#h2hCard:not([hidden])");
+        widths.push(await np.evaluate(() => document.querySelector("#scoreTable").scrollWidth));
+        await nc.close();
+      }
+      check(widths[0] <= widths[1] + 1, `a long one-word name doesn't widen the phone scorecard at ${w}px (${widths[0]} vs ${widths[1]})`);
+    }
+  }
   // On a tall screen, the two charts stay together however tall the ticket is.
   {
     const gc = await browser.newContext({ viewport: { width: 1920, height: 1080 }, reducedMotion: "reduce" });
@@ -643,6 +678,261 @@ try {
     check(gap <= 17, `the price and account charts sit together on a 1920x1080 screen (gap ${Math.round(gap)}px)`);
     await gc.close();
   }
+
+  // (14) Readiness audit: what a first-time player, a phone, a keyboard and a bad network meet.
+  // Each block below runs on its own: an exception fails that block's check, not the rest.
+  const block = async (fn) => {
+    try { await fn(); } catch (e) { check(false, `audit block threw: ${String(e.message || e).split("\n")[0]}`); }
+  };
+  const fresh = async (opts = {}) => {
+    const c = await browser.newContext({ viewport: { width: 1280, height: 800 }, reducedMotion: "reduce", ...opts });
+    const p = await c.newPage();
+    p.on("pageerror", (e) => errors.push(String(e)));
+    return { c, p };
+  };
+  const linkOf = (cfg, a) => Buffer.from(JSON.stringify({ c: cfg, a })).toString("base64url");
+  await block(async () => {
+    // On a laptop screen the ticket scrolls on its own: a price click shows what it did, and a
+    // blocked order says why beside the button, which never scrolls away.
+    const { c, p } = await fresh();
+    await p.goto(`http://127.0.0.1:${PORT}/#/`);
+    await p.click("#startQuick");
+    await p.waitForSelector("#priceChart canvas");
+    const inView = (sel) => p.evaluate((q) => {
+      const el = document.querySelector(q);
+      if (!el || !el.getClientRects().length) return false;
+      const r = el.getBoundingClientRect();
+      const t = document.querySelector(".ticket").getBoundingClientRect();
+      const bar = document.querySelector("#actionBar").getBoundingClientRect();
+      return r.top >= t.top - 1 && r.bottom <= Math.min(t.bottom, bar.top) + 1;
+    }, sel);
+    await p.locator("#quotesTable tr.atm button.px[data-side='B'][data-type='C']").click();
+    await p.waitForTimeout(150);
+    check(await inView("#legsList li:last-child"), "at 1280x800 the option just added is in view");
+    await p.locator("#legsList li button").first().click();
+    await p.click('.quick-btns button[data-x="150"]');
+    await p.locator("#quotesTable tr.atm button.px[data-side='B'][data-type='C']").click();
+    await p.waitForTimeout(150);
+    const why = await p.evaluate(() => { const w = document.querySelector("#abWhy"); return w && w.getClientRects().length ? w.textContent : ""; });
+    check(await inView("#errors") && why.length > 10 && (await p.textContent("#errors")).startsWith(why.slice(0, 20)), "at 1280x800 a blocked order shows why, in the ticket and beside the button");
+    await c.close();
+  });
+  await block(async () => {
+    // A link cut short gets one plain message, which goes away once the player moves on.
+    const { c, p } = await fresh();
+    const demo = linkOf({ v: 1, sym: "UBER", end: "2026-10-30", fullTurns: 60, startTurn: 0, turns: 60, blind: true, seed: 1, mode: "full" }, []);
+    await p.goto(`http://127.0.0.1:${PORT}/#/replay/${demo.slice(0, 31)}`);
+    await p.waitForSelector("#screen-home:not([hidden])");
+    const msg = await p.textContent("#staleBanner");
+    check(msg.includes("incomplete or was changed") && !/JSON|atob|position/.test(msg), "a cut-off link gets a plain message, not a parser error");
+    await p.click("#startQuick");
+    await p.waitForSelector("#priceChart canvas");
+    check((await p.textContent("#staleBanner")) === "" && (await p.evaluate(() => document.querySelector("#staleBanner").getBoundingClientRect().height)) <= 1, "the error message goes away once a new game starts");
+    // Only one game is kept, so starting another over a game in progress asks first.
+    await playMonths(p, 1);
+    await p.click(".brand");
+    await p.waitForSelector("#resumeCard:not([hidden])");
+    const before = dialogs.length;
+    p.answer = false;
+    await p.click("#startFull");
+    await p.waitForTimeout(300);
+    check(dialogs.length === before + 1 && (await p.textContent("#resumeText")).startsWith("Month 2 of 12") && !(await p.isHidden("#screen-home")), "starting a new game over one in progress asks, and No keeps it");
+    p.answer = false;
+    await p.goto(chUrl);
+    await p.waitForSelector("#screen-home:not([hidden])");
+    await p.waitForSelector("#resumeCard:not([hidden])");
+    check(dialogs.length === before + 2 && (await p.textContent("#resumeText")).startsWith("Month 2 of 12"), "opening a challenge link over a game in progress asks, and No keeps it");
+    await p.click("#startFull");
+    await p.waitForFunction(() => document.querySelector("#sTurn").textContent.startsWith("1 of 60"));
+    check(dialogs.length === before + 3, "Yes starts the new game");
+    // A month's summary comes back after a reload.
+    await playMonths(p, 1);
+    const toast = await p.textContent("#turnToast");
+    await p.reload();
+    await p.waitForSelector("#priceChart canvas");
+    check(toast.startsWith("Month 1:") && (await p.textContent("#turnToast")) === toast, "the last month's summary survives a reload");
+    await c.close();
+  });
+  await block(async () => {
+    // The month labels under a dated chart never repeat or skip a month.
+    const { c, p } = await fresh();
+    await p.goto(`http://127.0.0.1:${PORT}/#/how`);
+    const bad = await p.evaluate(async () => {
+      const { monthTicks } = await import("./ui/ticks.js");
+      const { dates } = await (await fetch("data/prices/UBER.json")).json();
+      const meta = await (await fetch("data/meta.json")).json();
+      let end = dates.length - 1;
+      while (dates[end] > meta.as_of) end--;
+      const ym = (d) => Number(d.slice(0, 4)) * 12 + Number(d.slice(5, 7)) - 1;
+      const out = [];
+      for (const [turns, starts] of [[60, [0]], [12, Array.from({ length: 49 }, (_, i) => i)]]) {
+        for (const st of starts) {
+          const s0 = end - 60 * 21 + st * 21;
+          for (const incr of [1, 2, 3, 6, 12]) {
+            const ms = monthTicks(dates, s0, 0, turns, incr, 21).map((x) => ym(dates[Math.round(s0 + x * 21)]));
+            for (let i = 1; i < ms.length; i++) if (ms[i] - ms[i - 1] !== incr) out.push(`${turns}m start ${st} every ${incr}: ${ms[i - 1]}->${ms[i]}`);
+            if (turns === 12 && incr <= 2 && ms.length < 12 / incr - 1) out.push(`${turns}m start ${st} every ${incr}: only ${ms.length}`);
+          }
+        }
+      }
+      return out;
+    }).catch((e) => [String(e)]);
+    check(bad.length === 0, `dated chart axes step one calendar month at a time${bad.length ? ": " + bad.slice(0, 3).join("; ") : ""}`);
+    await c.close();
+  });
+  await block(async () => {
+    // The verdict names a margin call as the reason; the coach writes minus signs and
+    // drawdowns the way the tiles do.
+    const { c, p } = await fresh();
+    const cfg = { v: 1, sym: "INTC", end: "2026-10-30", fullTurns: 60, startTurn: 13, turns: 12, blind: true, seed: 1, mode: "quick" };
+    await p.goto(`http://127.0.0.1:${PORT}/#/replay/${linkOf(cfg, [[0, ""], [-100, ""], ...Array(10).fill([null, ""])])}`);
+    await p.waitForSelector("#resEquityChart canvas");
+    check(/margin call in month \d+ sold your positions/.test(await p.textContent("#verdict")), "after a margin call the verdict says so");
+    const coach = (await p.textContent("#coachNotes")) + (await p.textContent("#versusNote"));
+    check(!/-[$\d]/.test(coach) && /max drawdown of −\d/.test(coach), "the coach uses true minus signs and signed drawdowns");
+    check((await p.locator("#screen-results h1").count()) === 1 && (await p.locator("#versusNote h2").count()) === 1, "results headings run h1, then h2 (the note beside the verdict)");
+    const coachHeads = await p.evaluate(() => [...document.querySelectorAll("#coachNotes .note-head > :last-child")].map((h) => `${h.tagName}:${h.textContent}`));
+    check(coachHeads.length >= 3 && coachHeads.every((t) => /^H3:[A-Z]/.test(t)) && !(await p.textContent("#coachNotes")).includes("<"), `coach notes are titled with h3 headings (${coachHeads.join(", ")})`);
+    // The legend toggles a line from the keyboard too.
+    const name = p.locator("#resEquityChart .u-legend .u-series + .u-series > th").first();
+    await name.focus();
+    const was = await name.getAttribute("aria-pressed");
+    await p.keyboard.press("Enter");
+    check((await name.getAttribute("role")) === "button" && was === "true" && (await name.getAttribute("aria-pressed")) === "false" && (await p.locator("#resEquityChart .u-legend .u-series.u-off").count()) === 1, "a legend name hides its line from the keyboard");
+    await c.close();
+  });
+  await block(async () => {
+    // An open game's challenge says "tape", not "blind tape"; the four-option limit is a note,
+    // not an error, while the order is still valid.
+    const { c, p } = await fresh();
+    await c.grantPermissions(["clipboard-read", "clipboard-write"]);
+    await p.goto(`http://127.0.0.1:${PORT}/#/`);
+    await p.evaluate(() => { const o = document.querySelector("#optTicker"); o.value = "KO"; o.dispatchEvent(new Event("change")); });
+    await p.click("#startQuick");
+    await p.waitForSelector("#priceChart canvas");
+    await p.selectOption("#legSize", "0.1");
+    for (let i = 0; i < 5; i++) await p.click("#addLeg");
+    check((await p.locator("#legsList li").count()) === 4 && (await p.getAttribute("#errors", "class")).includes("note-only") && (await p.isEnabled("#nextTurn")), "the four-option limit shows as a note beside a valid order");
+    for (const l of await p.locator("#legsList li button").all()) await p.locator("#legsList li button").first().click();
+    await autopilot(p, "buyHold");
+    await p.waitForSelector("#resEquityChart canvas");
+    await p.click("#challengeBtn");
+    await p.waitForFunction(() => document.querySelector("#copyMsg").textContent !== "");
+    const m = await p.textContent("#copyMsg");
+    check(m.includes("same tape") && !m.includes("blind"), "an open game's challenge doesn't promise a blind tape");
+    await c.close();
+  });
+  await block(async () => {
+    // A phone whose clipboard is refused still fits the screen.
+    const { c, p } = await fresh({ viewport: { width: 375, height: 812 }, isMobile: true, hasTouch: true });
+    await p.goto(`http://127.0.0.1:${PORT}/#/`);
+    await p.click("#startQuick");
+    await p.waitForSelector("#priceChart canvas");
+    await autopilot(p, "buyHold");
+    await p.waitForSelector("#resEquityChart canvas");
+    await p.evaluate(() => { navigator.clipboard.writeText = () => Promise.reject(new Error("denied")); navigator.share = undefined; });
+    await p.click("#challengeBtn");
+    await p.waitForSelector("#copyMsg a");
+    const over = await p.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+    check(over <= 1, `the copy-it-yourself link fits a 375px phone (overflow ${over}px)`);
+    check(await p.evaluate(() => parseFloat(getComputedStyle(document.querySelector(".rk")).fontSize)) >= 12, "rank chips are at least 12px on phones");
+    await c.close();
+  });
+  await block(async () => {
+    // No data: a plain message and a retry instead of an empty page; How it works still opens.
+    const { c, p } = await fresh();
+    await p.route("**/data/meta.json", (r) => r.fulfill({ status: 404, body: "" }));
+    await p.goto(`http://127.0.0.1:${PORT}/#/`);
+    await p.waitForSelector("#bootRetry:not([hidden])");
+    check((await p.textContent("#bootMsg")).includes("Couldn't load the market data") && (await p.textContent("#staleBanner")) === "", "no data: a plain message and a retry button, not an empty page");
+    await p.click('.nav a[data-nav="how"]');
+    await p.waitForSelector("#screen-how:not([hidden])", { timeout: 2000 }).catch(() => {});
+    check(!(await p.isHidden("#screen-how")), "How it works opens without the data");
+    await c.close();
+  });
+  await block(async () => {
+    // While a game's prices load, the pressed card says so and a second press doesn't queue
+    // another game; a saved game whose prices fail to load is mentioned, not silently dropped.
+    const { c, p } = await fresh();
+    await p.goto(`http://127.0.0.1:${PORT}/#/`);
+    await p.waitForSelector("#homeData strong");
+    await p.route("**/data/prices/*.json", async (r) => { await new Promise((ok) => setTimeout(ok, 1200)); await r.continue(); });
+    await p.click("#startQuick");
+    const busy = await p.getAttribute("#startQuick", "aria-busy");
+    await p.click("#startQuick");
+    await p.waitForSelector("#priceChart canvas");
+    await p.unroute("**/data/prices/*.json");
+    await p.waitForTimeout(1500);
+    check(busy === "true" && (await p.textContent("#sTurn")).startsWith("1 of 12") && !(await p.isHidden("#screen-game")), "a pressed card shows it is loading and a second press starts nothing more");
+    await playMonths(p, 1);
+    await p.route("**/data/prices/*.json", (r) => r.fulfill({ status: 404, body: "" }));
+    await p.reload();
+    await p.waitForSelector("#homeData strong");
+    await p.waitForFunction(() => !document.querySelector("#tabNote").hidden, null, { timeout: 4000 }).catch(() => {});
+    check((await p.textContent("#tabNote")).includes("Couldn't load the prices for your saved game"), "a saved game that can't load is mentioned, not silently dropped");
+    // A save dated after the loaded data doesn't blame another tab.
+    await p.unroute("**/data/prices/*.json");
+    await p.evaluate((code) => localStorage.setItem("bt-save-v1", JSON.stringify({ code, challenge: null, tab: "x" })), linkOf({ v: 1, sym: "KO", end: "2099-01-01", fullTurns: 60, startTurn: 0, turns: 12, blind: true, seed: 1, mode: "quick" }, [[0, ""]]));
+    await p.reload();
+    await p.waitForFunction(() => !document.querySelector("#tabNote").hidden, null, { timeout: 4000 }).catch(() => {});
+    const note = await p.textContent("#tabNote");
+    check(note.includes("newer market data") && !note.includes("another tab"), "a save from newer data asks for a reload without blaming another tab");
+    await c.close();
+  });
+  await block(async () => {
+    // Structure for screen readers and layout around the fixed action bar.
+    const { c, p } = await fresh();
+    await p.goto(`http://127.0.0.1:${PORT}/#/`);
+    await p.click("#startQuick");
+    await p.waitForSelector("#priceChart canvas");
+    const s14 = await p.evaluate(() => ({
+      h1: document.querySelectorAll("#screen-game h1").length,
+      names: [...document.querySelectorAll("#screen-game section[aria-label], #screen-game section[aria-labelledby]")].map((e) => e.getAttribute("aria-label") || document.getElementById(e.getAttribute("aria-labelledby"))?.textContent),
+      toast: getComputedStyle(document.querySelector("#turnToast")).display !== "none" && !document.querySelector("#turnToast").hidden,
+    }));
+    check(s14.h1 === 1 && new Set(s14.names).size === s14.names.length, `the game screen has one h1 and distinct region names (${s14.names.join(", ")})`);
+    check(s14.toast, "the month summary region is rendered before its first message");
+    await p.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+    await p.waitForTimeout(100);
+    const footerSeen = await p.evaluate(() => {
+      const s = document.querySelector(".footer span:last-child").getBoundingClientRect();
+      const hit = document.elementFromPoint(s.left + 5, s.top + s.height / 2);
+      return !!hit && hit.closest(".footer") !== null;
+    });
+    check(footerSeen, "the footer disclaimer can be scrolled clear of the action bar");
+    await c.close();
+    const z = await fresh({ viewport: { width: 640, height: 400 } });
+    await z.p.goto(`http://127.0.0.1:${PORT}/#/`);
+    await z.p.waitForSelector("#homeData strong");
+    check(await z.p.evaluate(() => getComputedStyle(document.querySelector(".topbar")).position) === "static", "on a short (zoomed) screen the top bar scrolls away");
+    await z.c.close();
+    const t = await fresh({ viewport: { width: 1024, height: 768 }, hasTouch: true });
+    await t.p.goto(`http://127.0.0.1:${PORT}/#/`);
+    await t.p.click("#startQuick");
+    await t.p.waitForSelector("#priceChart canvas");
+    const smallT = await t.p.evaluate(() => [...document.querySelectorAll(".quick-btns button, #quotesTable button.px, .theme-toggle, select")].filter((b) => b.getClientRects().length && b.getBoundingClientRect().height < 44).length);
+    check(smallT === 0, `tablet touch targets are at least 44px tall (${smallT} smaller)`);
+    await t.c.close();
+    const f = await fresh({ forcedColors: "active" });
+    await f.p.goto(`http://127.0.0.1:${PORT}/#/`);
+    await f.p.click("#startQuick");
+    await f.p.waitForSelector("#priceChart canvas");
+    await f.p.click('.quick-btns button[data-x="100"]');
+    const bgs = await f.p.evaluate(() => ["100", "50"].map((x) => getComputedStyle(document.querySelector(`.quick-btns button[data-x="${x}"]`)).backgroundColor));
+    check(bgs[0] !== bgs[1], "in forced colors the chosen stock position stands out");
+    await f.c.close();
+  });
+  await block(async () => {
+    // Home: the pool is counted honestly and the sample tape is real (the S&P 500 ETF).
+    const { c, p } = await fresh();
+    await p.goto(`http://127.0.0.1:${PORT}/#/`);
+    await p.waitForSelector("#tapeDemo.ready", { timeout: 4000 }).catch(() => {});
+    check((await p.textContent("#homeData")).startsWith("10 stocks and the S&P 500"), "home counts 10 stocks and the S&P 500");
+    check((await p.textContent("#tapeName")) === "S&P 500 ETF (SPY)" && /^M0\.0 [\d.]+( L[\d.]+ [\d.]+){60}$/.test(await p.getAttribute("#tapeDemo path", "d")), "the home page's sample tape is drawn from real prices");
+    await p.goto(`http://127.0.0.1:${PORT}/#/how`);
+    check((await p.textContent("#how-limits + ul")).includes("can be decoded"), "the limits say a shared link can be decoded");
+    await c.close();
+  });
 
   // How it works + data pages.
   await page.goto(`http://127.0.0.1:${PORT}/#/data`);

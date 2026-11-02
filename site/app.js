@@ -8,8 +8,9 @@ import { debrief } from "./engine/coach.js";
 import { encodeReplay, decodeReplay } from "./engine/replay.js";
 import { mulberry32, pick, randInt, newSeed } from "./engine/rng.js";
 import { drawdownSeries } from "./engine/metrics.js";
-import { loadMeta, loadBundle } from "./ui/data.js";
+import { loadMeta, loadBundle, loadSeries } from "./ui/data.js";
 import { makeChart, rebuildAll, lineKey } from "./ui/charts.js";
+import { monthTicks } from "./ui/ticks.js";
 import { money, pct, num, signClass, fmtDate, fmtMonthYear, isoToSec, change, ordinal } from "./ui/format.js";
 
 const $ = (id) => document.getElementById(id);
@@ -47,26 +48,50 @@ init().catch((e) => fatal(e));
 async function init() {
   initTheme();
   wireStatic();
+  // Routing starts at once: How it works needs no data, so it opens while the data loads (or
+  // after it fails). Every other screen waits for the data index; route() reads the hash when
+  // it runs, so a link clicked while loading is still honored.
+  window.addEventListener("hashchange", route);
+  window.addEventListener("storage", onStorage);
+  await null; // the routing state below this function in the module is set up first
+  route();
   try {
     S.meta = await loadMeta();
   } catch (e) {
-    $("homeData").textContent = "Couldn't load market data. Please refresh.";
-    throw e;
+    console.error(e);
+    $("bootMsg").textContent = "Couldn't load the market data. Check your connection and try again.";
+    $("bootRetry").hidden = false;
+    return;
   }
   renderHomeMeta();
   renderDataPage();
-  // Routes start only once the data index is in; a link clicked while loading is still
-  // honored, because route() reads the hash when it runs.
-  window.addEventListener("hashchange", route);
-  window.addEventListener("storage", onStorage);
   route();
 }
 
 function fatal(e, { quiet = false } = {}) {
   if (!quiet) console.error(e);
   const b = $("staleBanner");
-  b.hidden = false;
+  b.dataset.err = "1";
   b.textContent = `Something went wrong: ${e.message}`;
+}
+
+/** Take an error message down once the player has moved on; a stale-data notice stays. */
+function clearError() {
+  const b = $("staleBanner");
+  if (!b.dataset.err) return;
+  delete b.dataset.err;
+  b.textContent = b.dataset.stale || "";
+}
+
+/** Decode a shared link, with one plain message for any link that was cut short or changed. */
+function decodeLink(code, kind) {
+  try {
+    const r = decodeReplay(code);
+    if (!r || !r.cfg || typeof r.cfg !== "object" || !Array.isArray(r.actions)) throw new Error("no settings");
+    return r;
+  } catch {
+    throw new Error(`This ${kind} link is incomplete or was changed. Copy the whole link and try again.`);
+  }
 }
 
 // ------------------------------------------------------------------ storage
@@ -106,10 +131,11 @@ async function restoreSave({ keep = false } = {}) {
     return drop(); // the saved game itself is unreadable: drop it quietly and start fresh
   }
   // Saved with newer market data than this tab loaded (the tab was opened before the daily
-  // refresh): the save is fine, this tab is out of date. Keep it and ask for a reload.
+  // refresh, or the site was mid-update): the save is fine, this tab is out of date. Keep it
+  // and ask for a reload.
   if (typeof cfg?.end === "string" && /^\d{4}-\d{2}-\d{2}$/.test(cfg.end) && cfg.end > S.meta.as_of) {
     S.game = null;
-    tabNote("A game was saved in another tab with newer market data. Reload this tab to pick it up.");
+    tabNote("The saved game uses newer market data than this tab has. Reload the page to pick it up.");
     return false;
   }
   try {
@@ -120,7 +146,10 @@ async function restoreSave({ keep = false } = {}) {
   try {
     await setupGame(cfg);
   } catch {
-    S.game = null; // the price data didn't load: keep the save for the next visit
+    // The price data didn't load: keep the save for the next visit, and say so, so the home
+    // screen doesn't look as if the game never existed.
+    S.game = null;
+    tabNote("Couldn't load the prices for your saved game. Check your connection and reload the page to resume it.");
     return false;
   }
   try {
@@ -134,6 +163,9 @@ async function restoreSave({ keep = false } = {}) {
   } catch {
     return drop();
   }
+  // Bring back the last month's summary, as it was before the reload.
+  const lastTurn = S.game.log[S.game.log.length - 1];
+  if (lastTurn && !S.game.over) S.lastToast = beatFor(lastTurn, lastTurn.equityStart, lastTurn.equityEnd);
   if (S.game.over) S.benchmarks = runBenchmarks(S.market, { startIdx: S.game.startIdx, turns: S.game.turns }, S.spyMarket);
   ownSave();
   return true;
@@ -157,7 +189,7 @@ function tabNote(text) {
  * is (playing or on its results), say so and stop saving here.
  */
 function onStorage(e) {
-  if (e.key !== SAVE_KEY || !e.newValue) return;
+  if (e.key !== SAVE_KEY || !e.newValue || !S.meta) return; // before the data is in, the first route reads the save anyway
   let from = null;
   try { from = JSON.parse(e.newValue).tab; } catch { /* unreadable: treat as another tab */ }
   if (from === TAB) return;
@@ -214,6 +246,7 @@ function initTheme() {
 function show(screen) {
   const prev = S.screen;
   S.screen = screen;
+  $("boot").hidden = true;
   for (const el of document.querySelectorAll(".screen")) el.hidden = el.id !== `screen-${screen}`;
   for (const a of document.querySelectorAll(".nav a")) {
     const n = a.dataset.nav;
@@ -245,8 +278,17 @@ function route() {
 }
 
 async function routeNow(seq) {
-  if (!S.meta) return;
   const h = location.hash || "#/";
+  if (!S.meta) {
+    // Still loading the data index, or it failed: How it works opens anyway; anything else
+    // shows the loading (or failure) message instead of an empty page.
+    if (h === "#/how") { show("how"); return; }
+    S.screen = null;
+    for (const el of document.querySelectorAll(".screen")) el.hidden = true;
+    $("boot").hidden = false;
+    return;
+  }
+  clearError();
   if (h.startsWith("#/replay/")) {
     await openReplay(h.slice("#/replay/".length), seq);
     return;
@@ -290,6 +332,7 @@ function renderResume() {
 // ------------------------------------------------------------------ wiring
 
 function wireStatic() {
+  $("bootRetry").addEventListener("click", () => location.reload());
   $("startFull").addEventListener("click", () => newGame("full"));
   $("resumeBtn").addEventListener("click", () => { location.hash = "#/play"; });
   $("startQuick").addEventListener("click", () => newGame("quick"));
@@ -375,12 +418,47 @@ function renderHomeMeta() {
   const sel = $("optTicker");
   for (const p of poolInfo()) sel.add(new Option(`${p.symbol} (${p.name})`, p.symbol));
   const stale = isStale(m);
-  $("homeData").innerHTML = `${poolInfo().length} stocks · real daily closes through <strong>${fmtDate(m.as_of)}</strong> · updated every weekday · <a href="#/data">data status</a>`;
+  // The S&P 500 is in the pool as its ETF: count it apart from the stocks.
+  const n = poolInfo().length;
+  const withIndex = poolInfo().some((p) => p.symbol === (m.benchmark || "SPY"));
+  const what = withIndex ? `${n - 1} stocks and the S&amp;P 500` : `${n} stocks`;
+  $("homeData").innerHTML = `${what} · real daily closes through <strong>${fmtDate(m.as_of)}</strong> · updated every weekday · <a href="#/data">data status</a>`;
   if (stale) {
     const b = $("staleBanner");
-    b.hidden = false;
-    b.textContent = `Heads up: the latest market data is from ${fmtDate(m.as_of)}. The daily refresh may have failed; the game still works on the last good data.`;
+    b.dataset.stale = `Heads up: the latest market data is from ${fmtDate(m.as_of)}. The daily refresh may have failed; the game still works on the last good data.`;
+    if (!b.dataset.err) b.textContent = b.dataset.stale;
   }
+  drawHeroTape();
+}
+
+/**
+ * The home page's sample tape is real: the S&P 500 ETF over the full challenge window, rebased
+ * to 100 like a blind game. It stays an empty frame if the prices can't be loaded.
+ */
+async function drawHeroTape() {
+  let spy;
+  try { spy = await loadSeries("SPY"); } catch { return; }
+  const m = S.meta;
+  const dates = spy.dates || [];
+  const closes = spy.close || [];
+  let end = dates.length - 1;
+  while (end > 0 && dates[end] > m.as_of) end--;
+  const months = (m.game_years || 5) * 12;
+  const start = end - months * TD;
+  if (start < 0 || !(closes[start] > 0)) return;
+  const pts = [];
+  for (let d = start; d <= end; d += TD) pts.push((100 * closes[d]) / closes[start]);
+  if (pts.length < 2) return;
+  const lo = Math.min(...pts);
+  const hi = Math.max(...pts);
+  const y = (v) => (84 - (78 * (v - lo)) / Math.max(1e-9, hi - lo)).toFixed(1);
+  const path = pts.map((v, i) => `${i ? "L" : "M"}${((320 * i) / (pts.length - 1)).toFixed(1)} ${y(v)}`).join(" ");
+  const fig = $("tapeDemo");
+  fig.querySelector("path").setAttribute("d", path);
+  $("tapeMeta").textContent = `${months} months`;
+  $("tapeEnd").textContent = `ends at ${pts[pts.length - 1].toFixed(0)}`;
+  $("tapeName").textContent = "S&P 500 ETF (SPY)";
+  fig.classList.add("ready");
 }
 
 function poolInfo() {
@@ -400,8 +478,39 @@ function isStale(m) {
 // Queued like a route, so a game another tab saved that is still loading here can't replace
 // the one the player just asked for.
 function newGame(mode, opts = {}) {
-  routeChain = routeChain.then(() => startNewGame(mode, opts)).catch((e) => fatal(e));
+  if (S.starting) return routeChain; // a second press while the first game's prices load
+  if (!okToReplace("Start a new game?")) return routeChain;
+  // The pressed card shows it's working until the game opens (or fails).
+  S.starting = true;
+  const card = mode === "full" ? $("startFull") : $("startQuick");
+  card.setAttribute("aria-busy", "true");
+  card.classList.add("is-loading");
+  routeChain = routeChain.then(() => startNewGame(mode, opts)).catch((e) => fatal(e)).finally(() => {
+    S.starting = false;
+    card.removeAttribute("aria-busy");
+    card.classList.remove("is-loading");
+  });
   return routeChain;
+}
+
+/**
+ * The unfinished game that starting another would replace (only one game is kept), once at
+ * least a month of it has been played: { turn, turns }, or null.
+ */
+function gameAtRisk() {
+  if (S.game && !S.replay) return !S.game.over && S.actions.length ? { turn: S.game.turn, turns: S.game.turns } : null;
+  // No game in this tab (or a replay is showing): the one at stake is the saved game.
+  try {
+    const { cfg, actions } = decodeReplay(JSON.parse(load(SAVE_KEY)).code);
+    if (Array.isArray(actions) && actions.length > 0 && actions.length < cfg.turns) return { turn: actions.length, turns: cfg.turns };
+  } catch { /* nothing saved, or unreadable */ }
+  return null;
+}
+
+/** Ask before a game in progress is replaced; true when there is none, or the player agrees. */
+function okToReplace(question) {
+  const g = gameAtRisk();
+  return !g || confirm(`${question} Your game in progress (month ${g.turn + 1} of ${g.turns}) will be replaced.`);
 }
 
 async function startNewGame(mode, opts) {
@@ -421,6 +530,7 @@ async function startNewGame(mode, opts) {
     fatal(e);
     return;
   }
+  clearError();
   S.replay = false;
   ownSave();
   saveGame();
@@ -486,6 +596,9 @@ function monthLabelFor(x) {
   return monthsWords(x);
 }
 
+/** Month-start ticks for this game's charts (see ui/ticks.js). */
+const monthTicksFor = (startIdx, min, max, incr) => monthTicks(S.market.dates, startIdx, min, max, incr, TD);
+
 /** Blind-mode time in words: "Start", "2.5 months in", "3.0 months before the start". */
 function monthsWords(x) {
   const m = Math.round(x * 10) / 10;
@@ -521,8 +634,8 @@ function renderGame(fresh = false) {
     h2h.textContent = `Head-to-head: ${S.challenger.name} played this exact tape. Their score stays hidden until you finish, then you're ranked side by side.`;
   }
   // The month summary is written once per month, so coming back to the screen doesn't repeat it.
+  // The region is never hidden, only empty (it collapses), so the first summary is announced too.
   const toast = $("turnToast");
-  toast.hidden = !S.lastToast;
   if (toast.dataset.last !== S.lastToast) {
     toast.dataset.last = S.lastToast;
     toast.innerHTML = S.lastToast;
@@ -561,9 +674,11 @@ function renderGame(fresh = false) {
     return d ? fmtMonthYear(d) : "";
   })());
   const extra = { marks, vlines: [{ x: 0, label: "Start" }] };
+  // Open games label real months; blind ones count months from the start.
+  const xSplits = S.cfg.blind ? null : (min, max, incr) => monthTicksFor(S.game.startIdx, min, max, incr);
   if (!S.charts.price) {
     S.charts.price = makeChart({
-      el: $("priceChart"), height: () => (isPhone() ? 190 : 260), xFmt, xSpace: S.cfg.blind ? 40 : 76, rightPad: S.cfg.blind ? 22 : 32, yFmt: priceFmt, xLabel: "When", xLabelFmt: monthLabelFor, xIncrs: [1, 2, 3, 6, 12, 24],
+      el: $("priceChart"), height: () => (isPhone() ? 190 : 260), xFmt, xSplits, xSpace: S.cfg.blind ? 40 : 76, rightPad: S.cfg.blind ? 22 : 32, yFmt: priceFmt, xLabel: "When", xLabelFmt: monthLabelFor, xIncrs: [1, 2, 3, 6, 12, 24],
       series: [
         { label: "Price", colorVar: "--ink", width: 1.75, fmt: priceFmt },
         { label: "200-day average", colorVar: "--ref", width: 1.25, fmt: priceFmt },
@@ -591,7 +706,7 @@ function renderGame(fresh = false) {
     const mFmt = (v) => money(v, { compact: true });
     if (!S.charts.equity) {
       S.charts.equity = makeChart({
-        el: $("equityChart"), height: () => (isPhone() ? 170 : 200), xSpace: S.cfg.blind ? 40 : 76, rightPad: S.cfg.blind ? 22 : 32, xFmt, yFmt: mFmt, xLabel: "When", xLabelFmt: monthLabelFor, xIncrs: [1, 2, 3, 6, 12, 24],
+        el: $("equityChart"), height: () => (isPhone() ? 170 : 200), xSpace: S.cfg.blind ? 40 : 76, rightPad: S.cfg.blind ? 22 : 32, xFmt, xSplits, yFmt: mFmt, xLabel: "When", xLabelFmt: monthLabelFor, xIncrs: [1, 2, 3, 6, 12, 24],
         xRange: () => [0, Math.max(1, S.game.turn)],
         series: [
           { label: "You", colorVar: "--you", width: 2.25, fmt: (v) => money(v) },
@@ -695,14 +810,29 @@ function addLeg(side, type, strike, notional) {
     a.textContent = "";
     cancelAnimationFrame(S.alertFrame);
     S.alertFrame = requestAnimationFrame(() => { a.textContent = msg; });
+    revealOrder();
     return;
   }
   S.legNote = "";
   S.legs.push({ side, type, strike, notional });
   updateTicket();
+  revealOrder();
   const l = S.legs[S.legs.length - 1];
   const n = S.legs.length;
   announce(`Added: ${legWords(l)}${legPremium(l)}. ${n} option${n === 1 ? "" : "s"} in this order.`);
+}
+
+/**
+ * After a price is clicked, bring what changed into view: the reason the order is blocked if
+ * it is, otherwise the option just added. On laptop screens the ticket scrolls on its own and
+ * these sit below its fold.
+ */
+function revealOrder() {
+  const t = document.querySelector(".ticket");
+  if (t.scrollHeight <= t.clientHeight + 1) return; // phones and tall screens: nothing is hidden in the ticket
+  const errs = $("errors");
+  const el = errs.children.length ? errs : $("legsList").lastElementChild;
+  el?.scrollIntoView({ block: "nearest", behavior: reducedMotion() ? "auto" : "smooth" });
 }
 
 const legWords = (l) => `${l.side === "B" ? "Buy" : "Write"} ${l.strike}%-strike ${l.type === "C" ? "calls" : "puts"}, size ${pct(l.notional, 0)} of equity`;
@@ -813,6 +943,13 @@ function updateTicket() {
     errs.dataset.text = shown;
     errs.innerHTML = errText.map((e) => `<li>${e}</li>`).join("");
   }
+  // A note alone (the four-option limit) doesn't block the order: shown as a note, not an error.
+  errs.classList.toggle("note-only", !chk.errors.length);
+  // The first reason the order is blocked also shows beside the button, which never scrolls
+  // away (the list above is the full, announced copy).
+  const why = $("abWhy");
+  const whyText = chk.ok ? "" : (chk.errors[0] || "");
+  if (why.textContent !== whyText) why.textContent = whyText;
   const key = errText.map((e) => e.replace(/[−+-]?[$]?[\d.,]+%?/g, "#")).join("|");
   if (errs.dataset.last !== key) {
     errs.dataset.last = key;
@@ -960,9 +1097,12 @@ function verdictSentence(rows, res, bh) {
     if (better ? res.maxDrawdown < bh.maxDrawdown - 0.005 : res.maxDrawdown > bh.maxDrawdown + 0.005) out.push(dropTxt);
     return out.length ? ` (${out.join(", ")})` : "";
   };
+  // A margin call sells everything, so it explains the result before anything else does.
+  const margin = g.events.find((e) => e.kind === "margin");
   let why;
   if (res.busted) why = "your account was wiped out before the end.";
   else if (Math.abs(res.totalReturn - bh.totalReturn) < 0.005 && Math.abs(res.maxDrawdown - bh.maxDrawdown) < 0.01) why = `you tracked simply holding the stock almost exactly, ${rY} each.`;
+  else if (margin) why = `a margin call in month ${margin.turn + 1} sold your positions, and you finished at ${rY} against ${rB} for holding.`;
   else if (avgExp < 0.15) why = `you held mostly cash while the stock ${moved(bh.totalReturn)}.`;
   else if (ahead && res.totalReturn > bh.totalReturn + 0.005) why = `you beat simply holding the stock, ${rY} against ${rB}.`;
   else if (ahead && res.maxDrawdown < bh.maxDrawdown - 0.02) why = `you returned ${rY} against ${rB} for holding, with a smaller worst drop (${pct(res.maxDrawdown, 0)} against ${pct(bh.maxDrawdown, 0)}).`;
@@ -973,9 +1113,10 @@ function verdictSentence(rows, res, bh) {
   return `${place}: ${why}`;
 }
 
-function noteHtml(n) {
+/** A coach note. h: its heading level (the one beside the verdict comes before any h2 on the page). */
+function noteHtml(n, h = "h3") {
   const badge = n.tone === "good" ? "✓ good" : n.tone === "bad" ? "! watch" : "• note";
-  return `<div class="note ${n.tone}"><h3><span class="badge ${n.tone}">${badge}</span>${n.title}</h3><p>${n.text}</p>${n.detail ? `<p class="detail">${n.detail}</p>` : ""}</div>`;
+  return `<div class="note ${n.tone}"><div class="note-head"><span class="badge ${n.tone}">${badge}</span><${h}>${n.title}</${h}></div><p>${n.text}</p>${n.detail ? `<p class="detail">${n.detail}</p>` : ""}</div>`;
 }
 
 function renderResults() {
@@ -1045,6 +1186,8 @@ function renderResults() {
   for (let d = g.startIdx; d <= g.endIdx; d++) { rx.push((d - g.startIdx) / TD); rp.push(S.market.price[d]); }
   S.charts.reveal = makeChart({
     el: $("revealChart"), height: () => (isPhone() ? 130 : 160), rightPad: 30, xSpace: 80, xIncrs: [1, 2, 3, 6, 12, 24],
+    // Month numbers until the reveal, then ticks at real month starts.
+    xSplits: (min, max, incr) => (S.revealDates ? monthTicksFor(g.startIdx, min, max, incr) : null),
     xFmt: (v) => {
       if (!S.revealDates) return `${v}`;
       const d = S.market.dates[Math.round(g.startIdx + v * TD)];
@@ -1059,8 +1202,8 @@ function renderResults() {
   // Versus the benchmarks sits beside the verdict; the rest of the coach below.
   const notes = debrief(g, benches);
   const versus = notes.find((n) => n.title === "Versus the benchmarks");
-  $("versusNote").innerHTML = versus ? noteHtml(versus) : "";
-  $("coachNotes").innerHTML = notes.filter((n) => n !== versus).map(noteHtml).join("");
+  $("versusNote").innerHTML = versus ? noteHtml(versus, "h2") : "";
+  $("coachNotes").innerHTML = notes.filter((n) => n !== versus).map((n) => noteHtml(n)).join("");
 
   // Growth chart: you in color and front; benchmarks muted, patterned and labeled at the end.
   const xs = res.dates.map(isoToSec);
@@ -1070,9 +1213,9 @@ function renderResults() {
   const order = [...lines.slice(1), lines[0]]; // draw "you" last, on top
   const allEq = lines.flatMap((l) => l.eq).filter((v) => v > 0);
   const useLog = Math.max(...allEq) / Math.min(...allEq) > 4;
-  $("resEquitySub").textContent = `${useLog ? "Log scale" : "Linear scale"} · tap a name in the legend to hide its line`;
+  $("resEquitySub").textContent = `${useLog ? "Log scale" : "Linear scale"} · select a name in the legend to hide its line`;
   S.charts.resEquity = makeChart({
-    el: $("resEquityChart"), height: () => (isPhone() ? 260 : 320), xTime: true, yLog: useLog, yFmt: (v) => money(v, { compact: true }), ySize: 64,
+    el: $("resEquityChart"), height: () => (isPhone() ? 260 : 320), xTime: true, legendToggle: true, yLog: useLog, yFmt: (v) => money(v, { compact: true }), ySize: 64,
     xLabel: "Date", xLabelFmt: dateLabel, rightPad: isPhone() ? 86 : 108,
     series: order.map((l) => ({
       label: l.label, colorVar: STRAT_COLORS[l.key], fmt: (v) => money(v),
@@ -1179,7 +1322,7 @@ async function shareLink(url, copiedMsg, title) {
 }
 
 function copyChallenge() {
-  return shareLink(challengeUrl(), "Challenge link copied. Your friend gets the same blind tape, with your score hidden until they finish.", "Blind Tape challenge");
+  return shareLink(challengeUrl(), `Challenge link copied. Your friend gets the same ${S.cfg.blind ? "blind " : ""}tape, with your score hidden until they finish.`, "Blind Tape challenge");
 }
 
 function copyReplay() {
@@ -1215,15 +1358,24 @@ async function openChallenge(code, seq = routeSeq) {
     if (fromGame && !S.game.over) { history.back(); return; }
     return routeNow(seq);
   }
+  // Only one game is kept, so ask before a challenge replaces a game in progress. On a No, go
+  // back to where the player was (the game, or home with its Resume card).
+  if (!okToReplace("Open this challenge?")) {
+    if (seq !== routeSeq) return;
+    if (fromGame) { history.back(); return; }
+    history.replaceState(null, "", "#/");
+    return routeNow(seq);
+  }
   // Mark the entry, so Back to it (if the player moves on while it loads) is told apart from
   // opening the link again.
   if (seq === routeSeq) history.replaceState({ challenge: true }, "");
   const saved = { cfg: S.cfg, market: S.market, spyMarket: S.spyMarket, game: S.game, actions: S.actions, benchmarks: S.benchmarks, replay: S.replay, challenger: S.challenger, challengeCode: S.challengeCode };
   try {
-    const { cfg, actions } = decodeReplay(code);
-    validateReplayCfg(cfg, actions);
+    const { cfg, actions } = decodeLink(code, "challenge");
+    validateReplayCfg(cfg, actions, "challenge");
     await setupGame({ ...cfg, by: undefined });
     await attachChallenger(code);
+    clearError();
     S.replay = false;
     ownSave();
     saveGame();
@@ -1251,7 +1403,7 @@ async function openReplay(code, seq = routeSeq) {
   // Snapshot the current game so a broken replay link can't replace a game in progress.
   const saved = { cfg: S.cfg, market: S.market, spyMarket: S.spyMarket, game: S.game, actions: S.actions, benchmarks: S.benchmarks, replay: S.replay, challenger: S.challenger, challengeCode: S.challengeCode };
   try {
-    const { cfg, actions } = decodeReplay(code);
+    const { cfg, actions } = decodeLink(code, "replay");
     validateReplayCfg(cfg, actions);
     await setupGame(cfg);
     for (const a of actions) {
@@ -1276,9 +1428,9 @@ async function openReplay(code, seq = routeSeq) {
   }
 }
 
-function validateReplayCfg(cfg, actions) {
+function validateReplayCfg(cfg, actions, kind = "replay") {
   const fullTurns = (S.meta.game_years || 5) * 12;
-  const bad = (m) => { throw new Error(`This replay link isn't valid (${m}).`); };
+  const bad = (m) => { throw new Error(`This ${kind} link isn't valid (${m}).`); };
   if (!cfg || typeof cfg !== "object") bad("no game settings");
   if (!poolInfo().some((p) => p.symbol === cfg.sym)) bad("unknown stock");
   if (cfg.fullTurns !== fullTurns) bad("different game length");

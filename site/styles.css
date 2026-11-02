@@ -156,6 +156,10 @@ code { font-family: var(--font-num); font-size: 0.9em; background: var(--surface
 main { flex: 1; width: 100%; max-width: 1200px; margin: 0 auto; padding: 24px clamp(16px, 4vw, 32px) 48px; outline: none; }
 .footer { display: flex; flex-wrap: wrap; gap: 4px 24px; justify-content: space-between; padding: 16px clamp(16px, 4vw, 32px); border-top: 1px solid var(--line); font-size: 13px; color: var(--muted); }
 .banner { padding: 10px clamp(16px, 4vw, 32px); font-size: 14px; background: color-mix(in srgb, var(--short) 14%, var(--surface)); border-bottom: 1px solid var(--line); }
+/* Live regions stay rendered while empty (only collapsed), so screen readers announce their
+   first message too; a region shown and filled at the same moment is often missed. */
+.live:empty { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); border: 0; }
+.boot { padding: 32px 0; color: var(--ink-2); display: flex; flex-direction: column; align-items: flex-start; gap: 12px; }
 
 /* ---------- controls ---------- */
 button, select, input { font: inherit; color: inherit; }
@@ -207,9 +211,11 @@ details.help p + p { margin-top: 6px; }
 .tape-line { display: block; width: 100%; height: 96px; margin: 10px 0; }
 .tape-line path { fill: none; stroke: var(--you); stroke-width: 2.5; vector-effect: non-scaling-stroke; stroke-linejoin: round; }
 @media (prefers-reduced-motion: no-preference) {
-  .tape-line path { stroke-dasharray: 1; stroke-dashoffset: 1; animation: draw 1.4s ease-out .2s forwards; }
-  .tape-redact { animation: lift .45s ease-in 1.8s forwards; }
-  .tape-reveal { animation: fadein .3s ease-out 2.1s forwards; }
+  /* Plays once the real prices are drawn (.ready). */
+  .tape-line path { stroke-dasharray: 1; stroke-dashoffset: 1; }
+  .tape-demo.ready .tape-line path { animation: draw 1.4s ease-out .2s forwards; }
+  .tape-demo.ready .tape-redact { animation: lift .45s ease-in 1.8s forwards; }
+  .tape-demo.ready .tape-reveal { animation: fadein .3s ease-out 2.1s forwards; }
 }
 @media (prefers-reduced-motion: reduce) {
   .tape-redact { display: none; }
@@ -231,6 +237,8 @@ details.help p + p { margin-top: 6px; }
   transition: border-color .12s, transform .12s;
 }
 .mode-card:hover { border-color: var(--ink); }
+.mode-card.is-loading { cursor: progress; border-color: var(--ink); }
+.mode-card.is-loading .mode-sub::after { content: " · loading prices…"; color: var(--muted); }
 .mode-card:active { transform: translateY(1px); }
 .mode-title { font-size: 18px; font-weight: 700; }
 .mode-sub { color: var(--ink-2); font-size: 14px; }
@@ -282,6 +290,7 @@ details.help p + p { margin-top: 6px; }
 .panel { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px; min-width: 0; }
 .panel-head { margin-bottom: 8px; }
 .panel-sub { color: var(--muted); font-size: 13px; margin-top: 2px; }
+.panel-title { font-size: 16px; font-weight: 600; } /* the game screen's h1, sized as a panel heading */
 .title-redact { display: flex; align-items: center; gap: 10px; }
 .is-blind .title-redact::after { content: ""; width: 96px; height: 14px; border-radius: 2px; background: var(--redact); flex: none; }
 .panel-account { background: transparent; border: 0; padding: 4px 0 0; }
@@ -354,6 +363,7 @@ table { border-collapse: collapse; width: 100%; }
 .preview .wide { grid-column: 2 / -1; }
 .errors { margin: 0; padding: 10px 12px 10px 28px; color: var(--loss); font-size: 13.5px; background: color-mix(in srgb, var(--loss) 8%, var(--surface)); border-radius: 9px; }
 .errors:empty { display: none; }
+.errors.note-only { color: var(--ink-2); background: var(--surface-2); } /* a note that doesn't block the order */
 .autopilot { border-top: 1px solid var(--line); padding-top: 10px; }
 .autopilot > summary { cursor: pointer; font-weight: 600; font-size: 14px; min-height: 36px; display: flex; align-items: center; }
 .autopilot .hint, .hint { margin: 0; font-size: 12.5px; color: var(--muted); }
@@ -367,6 +377,10 @@ table { border-collapse: collapse; width: 100%; }
 .ab-status { font-size: 13px; color: var(--muted); }
 .beat { font-size: 14px; color: var(--ink); line-height: 1.35; }
 .beat .gain { color: var(--gain); font-weight: 600; } .beat .loss { color: var(--loss); font-weight: 600; }
+.ab-why { margin: 2px 0 0; font-size: 13px; color: var(--loss); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ab-why:empty { display: none; }
+/* The footer clears the fixed action bar on the game screen, so it can always be read. */
+body:has(#screen-game:not([hidden])) .footer { margin-bottom: 76px; }
 .btn-go { min-width: 220px; flex: none; }
 
 /* ---------- results ---------- */
@@ -387,6 +401,7 @@ table { border-collapse: collapse; width: 100%; }
 .challenge-group { display: flex; gap: 8px; flex-wrap: wrap; }
 .challenge-group input { min-height: 44px; width: 200px; }
 .copy-msg { flex-basis: 100%; }
+#copyMsg a { overflow-wrap: anywhere; } /* the fallback link must not push the page sideways */
 .block { margin-top: 28px; min-width: 0; }
 .block-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; margin-bottom: 10px; }
 .h2h { background: var(--surface); border: 1px solid var(--line); border-left: 3px solid var(--challenger); border-radius: var(--radius); padding: 16px; }
@@ -415,6 +430,8 @@ table { border-collapse: collapse; width: 100%; }
   .score tr.ch .name-in .key { flex: none; }
   .score tr.ch .name-in > span:last-child { overflow-wrap: anywhere; min-width: 7em; }
 }
+/* At any width a one-word name breaks inside the word rather than push a judged metric out of view. */
+.score tr.ch .name-in > span:last-child { overflow-wrap: anywhere; }
 /* The same name heads a column of the head-to-head table: let it break so the table fits on phones. */
 #h2hBody th { overflow-wrap: anywhere; }
 .score td.rank { color: var(--ink-2); width: 1%; }
@@ -431,7 +448,8 @@ table { border-collapse: collapse; width: 100%; }
 .coach { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px 24px; }
 .note { border-left: 3px solid var(--line-strong); padding: 2px 0 2px 14px; }
 .note.good { border-left-color: var(--gain); } .note.bad { border-left-color: var(--loss); }
-.note h3 { font-size: 14px; display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+.note-head { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+.note h2, .note h3 { font-size: 14px; font-weight: 600; }
 .note p { margin: 0 0 4px; font-size: 14px; }
 .note .detail { color: var(--muted); font-size: 13px; }
 .badge { font-size: 11px; font-weight: 700; padding: 1px 7px; border-radius: 999px; border: 1px solid currentColor; }
@@ -543,7 +561,11 @@ details.block > summary { cursor: pointer; min-height: 36px; display: flex; alig
   .ab-sep { display: none; }
   .btn-go { order: 2; min-width: 0; max-width: none; flex: 0 1 auto; padding: 10px 16px; }
   #screen-game { padding-bottom: 150px; }
+  body:has(#screen-game:not([hidden])) .footer { margin-bottom: 118px; }
   html { scroll-padding-bottom: 140px; }
+  /* Small labels stay at 12px or more on phones. */
+  .rk, .tie, .quotes td.k .atm-tag, .badge { font-size: 12px; }
+  .quotes th, .slider-scale { font-size: 12px; }
   .tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .tile { padding: 12px 10px; }
   .tile:nth-child(n) { border-left: 0; border-top: 1px solid var(--line); }
@@ -571,8 +593,27 @@ details.block > summary { cursor: pointer; min-height: 36px; display: flex; alig
 @media (max-width: 360px) {
   #dataTable th:nth-child(4), #dataTable td:nth-child(4) { display: none; }
 }
+/* Touch screens wider than a phone (tablets) get the same 44px targets as phones. */
+@media (pointer: coarse) and (min-width: 701px) {
+  .theme-toggle { width: 44px; height: 44px; }
+  .nav a, .toc a { min-height: 44px; display: inline-flex; align-items: center; }
+  details.help > summary, .autopilot > summary, .options-panel > summary, details.block > summary { min-height: 44px; }
+  .help-inline > summary { min-width: 44px; justify-content: center; }
+  input[type="range"] { height: 44px; }
+  .slider-wrap::after { top: 12px; bottom: 12px; }
+  .quick-btns button, .legs li button, select, input[type="text"], .quotes button.px { min-height: 44px; }
+  .legs li button { width: 44px; }
+}
+/* Short screens (a laptop zoomed in): the top bar scrolls away instead of taking the room. */
+@media (max-height: 500px) {
+  .topbar { position: static; }
+}
+@media (max-height: 500px) and (min-width: 1024px) {
+  .ticket { top: 8px; max-height: calc(100vh - 8px - 96px); }
+}
 @media (forced-colors: active) {
   .redact-bar, .tape-redact, .is-blind .title-redact::after, .ceremony .redact-bar { background: CanvasText; }
+  .quick-btns button[aria-pressed="true"] { background: Highlight; color: HighlightText; border-color: Highlight; }
   .switch-track { border: 1px solid CanvasText; }
   .switch-track::after { top: 2px; left: 2px; background: CanvasText; }
   .switch input:checked + .switch-track { background: Highlight; border-color: Highlight; }

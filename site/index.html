@@ -29,10 +29,15 @@
     </button>
   </header>
 
-  <div id="staleBanner" class="banner" role="status" hidden></div>
+  <div id="staleBanner" class="banner live" role="status"></div>
   <div id="tabNote" class="banner" role="status" hidden></div>
 
   <main id="app" tabindex="-1">
+    <div id="boot" class="boot">
+      <p id="bootMsg" role="status">Loading market data…</p>
+      <button type="button" class="btn-secondary" id="bootRetry" hidden>Try again</button>
+    </div>
+
     <!-- HOME -->
     <section id="screen-home" class="screen" hidden>
       <div class="home-hero">
@@ -40,15 +45,16 @@
           <h1>Trade one stock for five years without knowing which stock it is.</h1>
           <p class="lede">Real prices, one month at a time, with calls and puts. The name comes off at the end.</p>
         </div>
-        <figure class="tape-demo" aria-hidden="true">
+        <!-- A real tape: drawn from the S&P 500 ETF's last five years once the prices load. -->
+        <figure class="tape-demo" id="tapeDemo" aria-hidden="true">
           <div class="tape-head">
-            <span class="tape-name"><span class="tape-redact"></span><span class="tape-reveal">Revealed at the end</span></span>
-            <span class="tape-meta num">Month 1 of 60</span>
+            <span class="tape-name"><span class="tape-redact"></span><span class="tape-reveal" id="tapeName">Revealed at the end</span></span>
+            <span class="tape-meta num" id="tapeMeta"></span>
           </div>
           <svg class="tape-line" viewBox="0 0 320 90" preserveAspectRatio="none">
-            <path d="M0 62 L18 58 L34 64 L52 50 L70 54 L88 41 L104 46 L122 33 L140 39 L158 30 L176 44 L194 37 L212 52 L230 45 L248 28 L266 34 L284 20 L302 26 L320 14" pathLength="1"/>
+            <path d="" pathLength="1"/>
           </svg>
-          <div class="tape-foot"><span>Price starts at 100</span><span class="num">$100,000</span></div>
+          <div class="tape-foot"><span>Price starts at 100</span><span class="num" id="tapeEnd"></span></div>
         </figure>
       </div>
 
@@ -93,7 +99,7 @@
     <section id="screen-game" class="screen" hidden>
       <div id="h2hBanner" class="h2h-banner" hidden></div>
       <div class="game-layout">
-        <section class="game-status" aria-label="Your account">
+        <section class="game-status" aria-label="Account summary">
           <div class="gs-main">
             <span class="gs-label">Equity</span>
             <span class="gs-big num" id="sEquity">–</span>
@@ -116,7 +122,7 @@
 
         <section class="panel panel-price" aria-labelledby="priceTitle">
           <div class="panel-head">
-            <div class="title-redact"><h2 id="priceTitle">Mystery stock</h2></div>
+            <div class="title-redact"><h1 id="priceTitle" class="panel-title">Mystery stock</h1></div>
             <p class="panel-sub" id="priceSub"></p>
           </div>
           <div class="chart chart-price" id="priceChart"></div>
@@ -217,7 +223,8 @@
         <div class="ab-inner">
           <div class="ab-text">
             <span class="ab-status num"><span id="abMonth"></span><span class="ab-sep" aria-hidden="true"> · </span><span id="abEquity"></span></span>
-            <div id="turnToast" class="beat" role="status" aria-live="polite" hidden></div>
+            <div id="turnToast" class="beat live" role="status" aria-live="polite"></div>
+            <p id="abWhy" class="ab-why" aria-hidden="true"></p>
           </div>
           <button type="button" class="btn-primary btn-go" id="nextTurn">Next month</button>
         </div>
@@ -350,7 +357,7 @@
         <li><strong>Leverage includes options.</strong> Net exposure, the stock plus each option's delta, must stay between −100% and +150% when you place an order.</li>
         <li><strong>Writing options.</strong> Written calls must be covered by shares. Written puts need cash equal to the strike value after the whole order, not counting short-sale proceeds.</li>
         <li><strong>Financing.</strong> Cash earns the 13-week T-bill rate. Borrowing pays T-bill + 1.5%, shorts pay 0.5% a year, and an order can't take borrowing above 50% of equity.</li>
-        <li><strong>Drift and margin.</strong> Limits apply to orders; between orders positions drift. Below 25% of the gross stock position, a margin call sells everything. At zero equity the game ends and the account ranks last.</li>
+        <li><strong>Drift and margin.</strong> Limits apply to orders; between orders positions drift. If equity falls below 25% of the gross stock position, a margin call sells everything. At zero equity the game ends and the account ranks last.</li>
       </ul>
 
       <h2 id="how-options">Option pricing</h2>
@@ -382,18 +389,18 @@
 
       <h2 id="how-data">Data and updates</h2>
       <p>Daily dividend- and split-adjusted closes for every stock, the S&amp;P 500 ETF, the VIX and the 13-week T-bill yield are downloaded by a scheduled GitHub Actions job each weekday after the close. It validates every series and commits only real changes, and the site redeploys. The game window always ends at the latest close. Adding a stock is one line in <code>config/tickers.json</code>. See the <a href="#/data">Data</a> page for current status.</p>
-      <p>The engine has unit tests (Black-Scholes against textbook values and put-call parity, margin calls, settlement, the trading rules and every metric), and a separate pandas script recomputes every metric on real data and checks it against the browser.</p>
+      <p>The engine has unit tests (Black-Scholes against textbook values and put-call parity, margin calls, settlement, the trading rules and every metric), and a separate pandas script recomputes every metric on real data and checks it against the game engine's own numbers.</p>
 
       <h2 id="how-limits">Limits</h2>
       <ul>
-        <li>Option prices are model prices, not historical quotes; the smile is a simple shape and earnings days aren't modelled.</li>
+        <li>Option prices are model prices, not historical quotes; the smile is a simple shape and earnings days aren't modeled.</li>
         <li>Trades fill at the daily close, decisions are monthly, fractional shares are allowed, and market impact is ignored beyond the fixed costs.</li>
-        <li>Blind mode is honor-based: a careful look at the chart's shape or the T-bill rate can hint at the stock or era, and the browser's developer tools can show the price file.</li>
+        <li>Blind mode is honor-based: a careful look at the chart's shape or the T-bill rate can hint at the stock or era, the browser's developer tools can show the price file, and a challenge or replay link can be decoded to show the stock.</li>
         <li>Replay links reproduce a game exactly on the same data. If the provider revises adjusted prices, a replay can differ by a few dollars.</li>
       </ul>
 
       <h2>About</h2>
-      <p>Built for Duke's FMKT 256 (Fall 2026) AI extra-credit project with Claude (Anthropic) as the AI pair-programmer: game design, engine, tests, data pipeline and this site. Source: <a id="repoLink" href="https://github.com/cartermburke/FMKT256-AI-Proj">github.com/cartermburke/FMKT256-AI-Proj</a>.</p>
+      <p>Built for Duke's FMKT 256 (Fall 2026) AI extra-credit project with Claude (Anthropic) as the AI pair-programmer. Claude wrote the engine, tests, data pipeline and this site, and drafted its text; we chose the prompt, approved the game design, directed the work and reviewed it. Source: <a id="repoLink" href="https://github.com/cartermburke/FMKT256-AI-Proj">github.com/cartermburke/FMKT256-AI-Proj</a>.</p>
       <p class="muted small">Academic exercise, not investment advice. Past performance on historical data says nothing about future results.</p>
     </section>
 
@@ -409,7 +416,7 @@
       </div>
       <p id="dataLinks" class="small data-links"></p>
       <h2>How updates work</h2>
-      <p>A GitHub Actions workflow (<code>.github/workflows/update-data.yml</code>) runs every weekday at 22:30 UTC (4:30pm CST), when the config changes, or on demand. It tries yfinance, then the Yahoo Finance chart API, then Nasdaq's historical API (and FRED for T-bills), validates every series, and commits only changed files; the site redeploys from that commit. If a source fails, the last good data is kept and this page flags it as stale.</p>
+      <p>A GitHub Actions workflow (<code>.github/workflows/update-data.yml</code>) runs every weekday at 22:30 UTC, after the US market close, when the config changes, or on demand. It tries yfinance, then the Yahoo Finance chart API, then Nasdaq's historical API (and FRED for T-bills), validates every series, and commits only changed files; the site redeploys from that commit. If a source fails, the last good data is kept and this page flags it as stale.</p>
     </section>
   </main>
 

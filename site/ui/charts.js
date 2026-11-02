@@ -58,6 +58,13 @@ function seriesOpts(s) {
   return o;
 }
 
+/** Ticks at whole multiples of incr between min and max. */
+function multiples(min, max, incr) {
+  const out = [];
+  for (let v = Math.ceil(min / incr - 1e-9) * incr; v <= max + 1e-9; v += incr) out.push(Math.round(v / incr) * incr);
+  return out;
+}
+
 /** 1-2-5 ticks for log axes ($50K, $100K, $200K, $500K, $1M ...). */
 function logSplits(u, axisIdx, min, max) {
   const out = [];
@@ -243,7 +250,8 @@ function drawMarks(u, spec) {
  * spec = { el, height (number | () => number), xTime, xFmt, yFmt, yLog, xIncrs, xRange, yRange, ySize,
  *          series: [{label, colorVar, width, dash, alpha, fillAlpha, fmt, bars, show, endLabel, strong}],
  *          data: [xs, ys...], zeroLine, xLabel, xLabelFmt, marks: [{x,y,up}], vlines: [{x,label}],
- *          rightPad: px reserved for end labels, xSpace: min px between x ticks }
+ *          rightPad: px reserved for end labels, xSpace: min px between x ticks, xSplits,
+ *          legendToggle: legend names can be switched with the keyboard too }
  */
 export function makeChart(spec) {
   const chart = { spec, u: null };
@@ -273,7 +281,11 @@ export function makeChart(spec) {
         },
       },
       axes: [
-        { ...axis(spec.xFmt ? (v) => spec.xFmt(v) : null, { side: 2, size: spec.xTime ? 48 : 30 }), space: spec.xSpace ?? 50, ...(spec.xIncrs ? { incrs: spec.xIncrs } : {}) },
+        {
+          ...axis(spec.xFmt ? (v) => spec.xFmt(v) : null, { side: 2, size: spec.xTime ? 48 : 30 }), space: spec.xSpace ?? 50, ...(spec.xIncrs ? { incrs: spec.xIncrs } : {}),
+          // xSplits(min, max, incr) places ticks itself (null: whole multiples of incr).
+          ...(spec.xSplits ? { splits: (u, ai, min, max, incr) => spec.xSplits(min, max, incr) ?? multiples(min, max, incr) } : {}),
+        },
         { ...axis(spec.yFmt ?? null, { side: 3, size: spec.ySize ?? 56 }), ...(spec.yLog ? { splits: logSplits } : {}) },
       ],
       legend: { live: true, markers: { width: 0 } },
@@ -324,6 +336,22 @@ export function makeChart(spec) {
         m.innerHTML = s.bars
           ? `<svg class="line-key" width="12" height="10" aria-hidden="true"><rect width="12" height="10" rx="2" style="fill:${colorOf(s)}"/></svg>`
           : lineKey(colorOf(s), s.dash, { stroke: Math.min(3, s.width ?? 2) });
+      }
+      // A name in the legend hides or shows its line on click (uPlot's handler is on the name
+      // cell); make that cell a toggle button for the keyboard and screen readers too.
+      const name = row.querySelector("th");
+      if (spec.legendToggle && name && s) {
+        name.tabIndex = 0;
+        name.setAttribute("role", "button");
+        name.setAttribute("aria-label", `Show the ${s.label} line`);
+        const sync = () => name.setAttribute("aria-pressed", String(!row.classList.contains("u-off")));
+        sync();
+        name.addEventListener("click", sync); // runs after uPlot's own handler has toggled the line
+        name.addEventListener("keydown", (e) => {
+          if (e.key !== "Enter" && e.key !== " ") return;
+          e.preventDefault();
+          name.click();
+        });
       }
     });
   };

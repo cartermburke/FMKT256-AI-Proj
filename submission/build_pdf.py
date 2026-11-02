@@ -6,8 +6,14 @@ Inputs (all regenerated from the repo, nothing typed in by hand except team.json
   submission/ai_log.json        how AI was used + review findings fixed
   submission/demo.json          demo replay (node submission/make_demo.mjs UBER)
   submission/img/*.png          screenshots (node submission/screenshots.mjs)
-  tests/artifacts/curves.json   benchmark results on every stock (node tests/export_curves.mjs)
-Test counts are taken from actually running the test suites.
+  tests/artifacts/curves.json   benchmark results on every stock (node tests/export_curves.mjs, run here)
+  tests/artifacts/e2e_summary.json  browser-test counts from the last run of
+                                (NODE_PATH=$(npm root -g) node tests/e2e.mjs); run it first in a fresh clone
+The unit-test and cross-check counts come from running those suites here.
+
+The demo, the screenshots and site/data must be from the same data date; the build stops if they
+aren't. To change only the cover (say, a NetID) after new data has been committed, build with that
+date's data checked out: git checkout <commit> -- site/data, build, then git checkout HEAD -- site/data.
 """
 from __future__ import annotations
 
@@ -115,6 +121,17 @@ ai = json.loads((SUB / "ai_log.json").read_text())
 demo = json.loads((SUB / "demo.json").read_text())
 meta = json.loads((ROOT / "site" / "data" / "meta.json").read_text())
 
+# Every page must describe the same data: the demo (page 4), the screenshots and the tables
+# computed below from site/data.
+shots_as_of = json.loads((SUB / "img" / "as_of.json").read_text())["as_of"] if (SUB / "img" / "as_of.json").exists() else None
+if demo.get("as_of") != meta["as_of"] or shots_as_of != meta["as_of"]:
+    raise SystemExit(f"Data dates differ: site/data {meta['as_of']}, demo.json {demo.get('as_of')}, screenshots {shots_as_of}. "
+                     "Regenerate the demo and the screenshots (node submission/make_demo.mjs UBER; node submission/screenshots.mjs), "
+                     "or build with the matching site/data checked out (see the notes at the top of this file).")
+E2E = ROOT / "tests" / "artifacts" / "e2e_summary.json"
+if not E2E.exists():
+    raise SystemExit("No browser-test results yet: run NODE_PATH=$(npm root -g) node tests/e2e.mjs first.")
+
 unit_out = run("node --test tests/*.test.mjs")
 unit_pass = int(re.search(r"# pass (\d+)", unit_out).group(1))
 unit_fail = int(re.search(r"# fail (\d+)", unit_out).group(1))
@@ -122,7 +139,7 @@ run("node tests/export_curves.mjs")
 xcheck_out = run("python3 tests/check_metrics.py")
 m = re.search(r"Checked (\d+) equity curves x (\d+) metrics: (\d+) mismatches", xcheck_out)
 xc_curves, xc_metrics, xc_bad = (int(m.group(1)), int(m.group(2)), int(m.group(3))) if m else (0, 0, -1)
-e2e = json.loads((ROOT / "tests" / "artifacts" / "e2e_summary.json").read_text())
+e2e = json.loads(E2E.read_text())
 curves = json.loads((ROOT / "tests" / "artifacts" / "curves.json").read_text())
 
 by = {}
@@ -136,6 +153,11 @@ months = ["January", "February", "March", "April", "May", "June", "July", "Augus
 y, mo, d = map(int, as_of.split("-"))
 as_of_txt = f"{months[mo - 1]} {d}, {y}"
 n_stocks = len(meta["pool"])
+
+
+def fx(x: float, spec: str) -> str:
+    """A number formatted with spec, negatives with a true minus sign as on the site."""
+    return format(x, spec).replace("-", "\u2212")
 
 # ----------------------------------------------------------------------------- page decorations
 
@@ -215,10 +237,11 @@ story += bullets([
     "<b>Options without option data.</b> Free historical option chains don't exist, so every option is priced from that day's market: an at-the-money vol anchored to the VIX plus a volatility smile. We checked the model against the empirical evidence (delta-hedged option returns), not just intuition.",
     "<b>A score that can't be gamed.</b> The overall rank combines the prompt's three metrics. Drawdown enters per unit of return, so tiny positions can't win by being small. Every result sits beside six benchmark strategies on the same tape, and a rule-based coach explains what drove it.",
     "<b>Head-to-head with no server.</b> A challenge link carries the stock, the window and every order. A friend plays the same blind tape, and the two of you are ranked side by side.",
-    "<b>Built and audited by AI agents.</b> One panel chose the prompt, six adversarial rounds tried to break the game and its redesign, and every bug found came with a reproduction and got a regression test (page 7).",
+    "<b>Built and audited by AI agents.</b> An AI panel scoped all three prompts and we picked prompt 1. Seven adversarial rounds then tried to break the game, its redesign and this submission, and every critical and major bug got a reproduction and a regression test (page 7).",
 ])
 story += [Spacer(1, 6), framed(img(SUB / "img" / "h2h.png", W - 8, max_h=2.1 * inch)),
-          Spacer(1, 3), P("Head-to-head result after a friend played the demo game's tape from a challenge link.", "small")]
+          Spacer(1, 3), P("Head-to-head from a challenge link: the demo game's scripted player against a second player who let "
+                          "the 200-day-trend autopilot play the same tape.", "small")]
 story.append(PageBreak())
 
 # ----------------------------------------------------------------------------- page 2
@@ -226,14 +249,14 @@ story.append(PageBreak())
 # A real capture of the game screen with notes beside it, so the text can point at each part.
 game_img = img(SUB / "img" / "game.png", W, max_h=4.4 * inch)
 game_notes = [
-    ("Top bar", "the account's value and return, then the month, net exposure and cash."),
-    ("Price chart", "up to a year before the start and every month played, with the 200-day average and a "
-                    "marker wherever the player traded."),
+    ("Top bar", "value and return, then the month, net exposure and cash."),
+    ("Price chart", "from a year before the start, with the 200-day average and a marker at each trade."),
     ("Your account", "its daily value, next to simply holding the stock."),
     ("Ticket", "set the stock position, then tap a bid to sell or an ask to buy options at five strikes. Here the "
                "player is long 100% and has just written a 105% call against it: a covered call."),
     ("Before and after", "every order is checked first, and the ticket lists each position before and after it."),
-    ("Bottom bar", "names the action (\u201cTrade and go to month 10\u201d) and sums up the month just played."),
+    ("Bottom bar", "names the action (\u201cTrade and go to month 10\u201d), sums up the last month, and says why "
+                   "an order is blocked."),
 ]
 notes_col = [P("A blind full game at month 9.", "small"), Spacer(1, 4)] + [P(f"<b>{k}:</b> {v}", "note") for k, v in game_notes]
 game_row = Table([[framed(game_img), notes_col]], colWidths=[game_img.drawWidth + 8, W - game_img.drawWidth - 8])
@@ -257,16 +280,18 @@ story.append(PageBreak())
 # ----------------------------------------------------------------------------- page 3
 
 you, bh = demo["you"], demo["buyHold"]
+beat_all = [a["symbol"] for a in demo["across"] if a["beatAll"]]
 story += [P("The scorecard and the debrief", "h1"),
           P(f"At the end the stock is revealed. The demo game linked on page 1 is a scripted player on a blind "
             f"five-year game. Its rule: long when the price is above its 200-day average and sell calls when the VIX is "
             f"above 22; below the average, stay mostly in T-bills with put protection. "
-            f"The stock turned out to be <b>{info.get(demo['symbol'], {}).get('name', demo['symbol'])} ({demo['symbol']})</b>. "
-            f"The scripted player had a Sharpe ratio of <b>{you['sharpe']:.2f}</b> vs {bh['sharpe']:.2f} for buy &amp; hold, "
-            f"a max drawdown of <b>{you['maxDrawdown'] * 100:.0f}%</b> vs {bh['maxDrawdown'] * 100:.0f}%, and an IRR of "
-            f"<b>{you['irr'] * 100:.1f}%</b> vs {bh['irr'] * 100:.1f}%. Run on every stock in the pool, the same rule beat "
-            f"buy &amp; hold on all three metrics for only {sum(a['beatAll'] for a in demo['across'])} of "
-            f"{len(demo['across'])} ({', '.join(a['symbol'] for a in demo['across'] if a['beatAll'])}). That is the "
+            f"We picked <b>{info.get(demo['symbol'], {}).get('name', demo['symbol'])} ({demo['symbol']})</b> for the demo. "
+            f"The scripted player had a Sharpe ratio of <b>{fx(you['sharpe'], '.2f')}</b> vs {fx(bh['sharpe'], '.2f')} for "
+            f"buy &amp; hold, a max drawdown of <b>{you['maxDrawdown'] * 100:.0f}%</b> vs {bh['maxDrawdown'] * 100:.0f}%, and "
+            f"an IRR of <b>{fx(you['irr'] * 100, '.1f')}%</b> vs {fx(bh['irr'] * 100, '.1f')}%. "
+            f"Run on every stock in the pool, the same rule beat buy &amp; hold on all three metrics for only "
+            f"{len(beat_all)} of {len(demo['across'])} ({', '.join(beat_all) or 'none'})"
+            f"{', so the demo shows one of its best cases' if demo['symbol'] in beat_all else ''}. That is the "
             "lesson the game teaches."),
           framed(img(SUB / "img" / "scorecard.png", W - 8, max_h=3.6 * inch)), Spacer(1, 8),
           P("The prompt judges on Sharpe, maximum drawdown <i>and</i> IRR. Every strategy is ranked on Sharpe, on IRR, and "
@@ -301,11 +326,14 @@ for sym in meta["pool"]:
     for k in ("coveredCall", "protectivePut", "trend200"):
         if sh[k] > sh["buyHold"]:
             wins[k] += 1
+    # Three decimals when the top two would print the same, so the bold one is visibly the best.
+    top2 = sorted(sh.values(), reverse=True)[:2]
+    dec = ".3f" if len(top2) == 2 and f"{top2[0]:.2f}" == f"{top2[1]:.2f}" else ".2f"
     row = [P(f"<b>{sym}</b>", "cell"), P(info.get(sym, {}).get("regime", ""), "cell")]
     for k in keys:
-        txt = f"{sh[k]:.2f}"
+        txt = fx(sh[k], dec)
         row.append(P(f"<b>{txt}</b>" if k == best else txt, "cell"))
-    row += [P(f"{-s['buyHold']['maxDrawdown'] * 100:.0f}%", "cell"), P(f"{s['buyHold']['irr'] * 100:+.1f}%", "cell")]
+    row += [P(f"{fx(-s['buyHold']['maxDrawdown'] * 100, '.0f')}%", "cell"), P(f"{fx(s['buyHold']['irr'] * 100, '+.1f')}%", "cell")]
     rows.append(row)
 cw = [0.55, 1.05, 0.72, 0.78, 0.82, 0.82, 0.62, 0.7, 0.66]
 scale = W / (sum(cw) * inch)
@@ -313,7 +341,7 @@ bt = Table(rows, colWidths=[c * inch * scale for c in cw], repeatRows=1)
 bt.setStyle(TableStyle([("LINEBELOW", (0, 0), (-1, 0), 0.8, INK2), ("LINEBELOW", (0, 1), (-1, -1), 0.4, GRID),
                         ("ALIGN", (2, 0), (-1, -1), "RIGHT"), ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
                         ("TOPPADDING", (0, 0), (-1, -1), 3), ("BOTTOMPADDING", (0, 0), (-1, -1), 3)]))
-story += [bt, Spacer(1, 8), P("Takeaways (computed from the table)", "h2")]
+story += [bt, Spacer(1, 8), P("Takeaways from the same runs", "h2")]
 n = len(rows) - 1
 
 
@@ -334,6 +362,18 @@ def lst(xs):
 
 
 cc_sh, cc_tr = names("coveredCall", "sharpe", "high"), names("coveredCall", "totalReturn", "high")
+# Where covered calls gave up the most total return against holding the stock.
+cc_lag = sorted([x for x in meta["pool"] if x in by and x not in cc_tr],
+                key=lambda z: by[z]["coveredCall"]["totalReturn"] - by[z]["buyHold"]["totalReturn"])[:3]
+# Where the trend rule's Sharpe moved furthest from buy and hold's, up and down.
+tr_gap = sorted([x for x in meta["pool"] if x in by], key=lambda z: by[z]["trend200"]["sharpe"] - by[z]["buyHold"]["sharpe"])
+
+
+def sharpe_vs(sym, k):
+    regime = info.get(sym, {}).get("regime", "")
+    where = f"{sym} ({regime[:1].lower() + regime[1:]})" if regime else sym
+    return f"{where}: Sharpe {fx(by[sym][k]['sharpe'], '.2f')} against {fx(by[sym]['buyHold']['sharpe'], '.2f')}"
+
 pp_sh, pp_dd = names("protectivePut", "sharpe", "high"), names("protectivePut", "maxDrawdown", "low")
 tr_sh, tr_dd = names("trend200", "sharpe", "high"), names("trend200", "maxDrawdown", "low")
 bests = set()
@@ -343,16 +383,18 @@ for sym in meta["pool"]:
         bests.add(max(keys, key=lambda k: s_[k]["sharpe"]))
 story += bullets([
     f"<b>Covered calls</b> beat buy &amp; hold on Sharpe for {len(cc_sh)} of {n} ({lst(cc_sh)}) and on total return for "
-    f"{len(cc_tr)} ({lst(cc_tr)}). Everywhere else they lagged, most of all on the big trenders "
-    f"({lst([x for x in sorted(meta['pool'], key=lambda z: -by[z]['buyHold']['totalReturn']) if x not in cc_tr][:3])}), "
-    "where selling the upside costs the most.",
+    f"{len(cc_tr)} ({lst(cc_tr)}). They gave up the most total return on {lst(cc_lag)}, where selling the upside "
+    "cost the most.",
     f"<b>Protective puts</b> beat buy &amp; hold on Sharpe for {len(pp_sh)} of {n} ({lst(pp_sh)}) and cut the maximum "
     f"drawdown for {len(pp_dd)} of {n}. Insurance has a monthly cost.",
     f"<b>The 200-day trend rule</b> beat buy &amp; hold on Sharpe for {len(tr_sh)} of {n} ({lst(tr_sh)}) and cut the "
-    f"maximum drawdown for {len(tr_dd)} of {n}. It helps most in long declines.",
+    f"maximum drawdown for {len(tr_dd)} of {n}. It helped most on {sharpe_vs(tr_gap[-1], 'trend200')}, and hurt most "
+    f"on {sharpe_vs(tr_gap[0], 'trend200')}.",
     f"<b>No single rule dominates:</b> {len(bests)} different strategies top the Sharpe column across the {n} "
     "instruments. So there is room for a player who reads the tape well, and that is what makes the game worth playing.",
 ])
+story.append(P("These rules trade once a month, so their results depend on the days the months start: moving the window's end "
+               "by a day or two changes some of these Sharpe ratios by 0.2 or more, and the counts above shift as new data arrive.", "small"))
 story.append(PageBreak())
 
 # ----------------------------------------------------------------------------- page 5
@@ -417,8 +459,8 @@ story += bullets([
     f"{xc_curves} real five-year equity curves (every benchmark on every stock): <b>{xc_bad} mismatches</b> beyond 1e-6.",
     f"<b>End-to-end browser test:</b> {e2e['passed']} of {e2e['passed'] + e2e['failed']} checks pass. It plays games through the real "
     "UI in Chromium: valid and invalid orders, attempts to get around the leverage limits, autopilot after a levered "
-    "month, the reveal, the replay link reproducing the exact result, a rejected bad replay link, the data page, "
-    "dark mode and a phone-sized screen, with no console errors.",
+    "month, the reveal, the replay link reproducing the exact result, damaged links, the data page, dark mode, phone "
+    "and tablet screens, keyboard use and a failing network, with no console errors.",
     "<b>Adversarial review:</b> four separate AI agents audited the finance math, tried to break the game, played "
     "it as a first-time user, and looked for gaps. What they found and how we fixed it is on the next page.",
 ])
@@ -430,13 +472,13 @@ story += [P("How we used AI", "h1")]
 story += bullets(ai["process"])
 if ai.get("fixes"):
     story += [P("Issues the AI review found and we fixed", "h2")]
-    story += bullets(ai["fixes"])
+    story += [KeepTogether([b]) for b in bullets(ai["fixes"])]
 story += [P("Limitations", "h2")]
 story += bullets([
-    "Option prices are model prices, not historical quotes. The smile is a simple two-parameter shape, not fitted to each stock's real option market, and earnings-day volatility isn't modelled.",
+    "Option prices are model prices, not historical quotes. The smile is a simple two-parameter shape, not fitted to each stock's real option market, and earnings-day volatility isn't modeled.",
     "Decisions are monthly and fill at the daily close. Fractional shares are allowed, and there is no market impact beyond the fixed costs.",
     "Prices are dividend-adjusted (total return), so options are priced as if the stock paid no dividends.",
-    "In blind mode a well-known stock can sometimes be recognised from the shape of its chart or the era of its T-bill rate, and a player who opens the browser's developer tools can see the price file.",
+    "In blind mode a well-known stock can sometimes be recognized from the shape of its chart or the era of its T-bill rate, and a player who opens the browser's developer tools can see the price file.",
 ])
 story += [Spacer(1, 8),
           P("Run it yourself", "h2"),

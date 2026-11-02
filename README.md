@@ -69,9 +69,9 @@ node tests/export_curves.mjs && python3 tests/check_metrics.py   # independent p
 node tests/e2e.mjs                                # Playwright: plays games through the real UI, saves screenshots
 ```
 
-## Key modelling choices
+## Key modeling choices
 
-- **Implied vol:** `IV_atm² = RV63(stock)² + (0.88·VIX/100)² − RV63(SPY)²`, then a smile `IV(K) = IV_atm·(1 − slope·ln(K/S))`: slope 3.0 on both sides for the index, and for single stocks 1.25 on the put side with a flat call wing. This adds the market's at-the-money variance risk premium once, in variance units, and prices out-of-the-money puts richer than calls. Two earlier versions failed reality checks and were replaced: one made covered calls dominate almost every stock, and the other let a SPY buy-write beat SPY by 46 points.
+- **Implied vol:** `IV_atm² = RV63(stock)² + (0.88·VIX/100)² − RV63(SPY)²`, then a smile `IV(K) = IV_atm·(1 − slope·ln(K/S))`: slope 3.0 on both sides for the index, and for single stocks 1.25 on the put side with a flat call wing. This adds the market's at-the-money variance risk premium once, in variance units, and prices out-of-the-money puts richer than calls. Three earlier versions failed reality checks and were replaced: one made covered calls dominate almost every stock, one let a SPY buy-write beat SPY by 46 points, and one made out-of-the-money stock calls so cheap that delta-hedged call buyers profited.
 - **Leverage and ranking:** net exposure (stock plus option delta) is capped at −100%/+150% per order, and all option legs together at 200% of equity notional. Written puts must be secured by cash left after the order. The overall rank is the average of the Sharpe, return-per-unit-of-drawdown and IRR ranks. Raw drawdown isn't averaged in, because it would reward tiny positions.
 - **Frictions:**
   - 5 bp on stock trades.
@@ -79,4 +79,4 @@ node tests/e2e.mjs                                # Playwright: plays games thro
   - Debit pays T-bill + 1.5%.
   - Shorts pay 0.5% a year to borrow.
   - Maintenance margin is 25%, checked at every daily close.
-- **Limitations:** model option prices (a simple two-parameter smile, not fitted to each stock; earnings days aren't modelled), monthly decisions at the close, fractional shares. See *How it works*.
+- **Limitations:** model option prices (a simple two-parameter smile, not fitted to each stock; earnings days aren't modeled), monthly decisions at the close, fractional shares. See *How it works*.

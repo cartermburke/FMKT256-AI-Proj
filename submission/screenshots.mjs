@@ -1,7 +1,7 @@
 // Captures curated screenshots for the submission PDF from a local server.
 //   node submission/screenshots.mjs   (writes submission/img/*.png)
 import { spawn } from "node:child_process";
-import { mkdirSync, readFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 
 const require = createRequire(import.meta.url);
@@ -23,7 +23,10 @@ try {
 
   await page.goto(base);
   await page.waitForSelector("#homeData strong");
+  await page.waitForSelector("#tapeDemo.ready"); // the sample tape is drawn from real prices once they load
   await page.screenshot({ path: OUT + "home.png" });
+  // The data date these screenshots show: build_pdf.py checks it against site/data and the demo.
+  const asOf = await page.evaluate(() => fetch("data/meta.json").then((r) => r.json()).then((m) => m.as_of));
 
   // A blind full game at month 9, long 100% with a covered call just added from the quotes. The frame is tall
   // enough to show the whole ticket: the leg, the before-and-after preview and the bottom bar.
@@ -55,13 +58,15 @@ try {
   await page.locator("#coachNotes").screenshot({ path: OUT + "coach.png" });
 
   // A head-to-head: challenge a friend from the demo game, friend plays the trend rule.
-  await page.fill("#challengeName", "Carter");
+  await page.fill("#challengeName", "Demo player");
   await ctx.grantPermissions(["clipboard-read", "clipboard-write"]);
   await page.click("#challengeBtn");
   await page.waitForFunction(() => document.querySelector("#copyMsg").textContent.includes("Challenge link copied"));
   const link = await page.evaluate(() => navigator.clipboard.readText());
   if (!link.includes("#/challenge/")) throw new Error(`unexpected clipboard: ${link.slice(0, 80)}`);
   const fp = await ctx.newPage();
+  // The month-9 game above is still saved in this browser: opening the challenge asks before replacing it.
+  fp.on("dialog", (d) => d.accept());
   await fp.goto(link);
   await fp.waitForSelector("#priceChart canvas");
   await fp.locator("#h2hBanner").screenshot({ path: OUT + "h2h-banner.png" });
@@ -82,7 +87,8 @@ try {
   await pm.goto(`${base}#/replay/${code}`);
   await pm.waitForSelector("#resEquityChart canvas");
   await pm.screenshot({ path: OUT + "mobile.png" });
-  console.log("screenshots written to", OUT);
+  writeFileSync(OUT + "as_of.json", JSON.stringify({ as_of: asOf }) + "\n");
+  console.log("screenshots written to", OUT, "for data through", asOf);
 } finally {
   await browser.close();
   server.kill();

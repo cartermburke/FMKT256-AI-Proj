@@ -1,8 +1,12 @@
 // Rule-based post-game debrief: turns the trade log into plain-English feedback.
 import { rankStrategies } from "./scoring.js";
 
-const pct = (x, d = 0) => `${(x * 100).toFixed(d)}%`;
-const money = (x) => `${x < 0 ? "-" : ""}$${Math.abs(Math.round(x)).toLocaleString("en-US")}`;
+// Negatives use the true minus sign (−), as the rest of the interface does.
+const pct = (x, d = 0) => {
+  const t = (x * 100).toFixed(d);
+  return `${Number(t) === 0 ? t.replace("-", "") : t.replace("-", "\u2212")}%`;
+};
+const money = (x) => `${Math.round(x) < 0 ? "\u2212" : ""}$${Math.abs(Math.round(x)).toLocaleString("en-US")}`;
 const ord = (n) => `${n}${n % 10 === 1 && n !== 11 ? "st" : n % 10 === 2 && n !== 12 ? "nd" : n % 10 === 3 && n !== 13 ? "rd" : "th"}`;
 
 export function debrief(game, benchmarks) {
@@ -29,7 +33,9 @@ export function debrief(game, benchmarks) {
     detail: upExp > downExp + 0.1
       ? "You leaned in before rallies more than before sell-offs. That could be skill or luck, but it paid."
       : upExp < downExp - 0.1
-        ? "You tended to be more exposed going into the worst months than into the best ones."
+        ? upExp < -0.05
+          ? "You were short going into the stock's best months, which is where a short loses most."
+          : "You tended to be more exposed going into the worst months than into the best ones."
         : Math.abs(allExp) < 0.1
           ? "You were mostly out of the stock, so your result came mainly from T-bill interest and any option premium."
           : "Your exposure barely differed between good and bad months, so your result came mostly from the stock itself.",
@@ -56,7 +62,7 @@ export function debrief(game, benchmarks) {
     const written = optMonths.reduce((s, t) => s + (t.writtenPremium || 0), 0);
     const mostlyWriter = written > bought;
     let detail;
-    if (mostlyWriter && net >= 0) detail = "You mostly sold options and kept more premium than you paid out. That is the volatility risk premium, and the cost is capped upside or being put the stock.";
+    if (mostlyWriter && net >= 0) detail = "You mostly sold options and kept more premium than you paid out. That is the volatility risk premium, and the cost is capped upside, or having the stock put to you.";
     else if (mostlyWriter) detail = "You mostly sold options, but the stock moved further than the premiums priced in, so payouts exceeded the premium collected.";
     else if (net >= 0) detail = "You mostly bought options, and they paid off: the stock moved further than the implied volatility had priced.";
     else detail = "You mostly bought options. Their time value decays when the stock doesn't move far enough, so insurance and lottery tickets both have a cost.";
@@ -88,7 +94,7 @@ export function debrief(game, benchmarks) {
       title: "Versus the benchmarks",
       text: `Against the ${benchmarks.length} benchmark strategies you placed ${ties.length ? "joint " : ""}${ord(you.overall)} of ${rows.length}${ties.length ? ` (tied with ${ties.join(", ")})` : ""}: ${ord(you.ranks.sharpe)} on Sharpe, ${ord(you.ranks.retToDD)} on return per unit of drawdown and ${ord(you.ranks.irr)} on IRR.${best && !ties.includes(best.short) ? ` The top benchmark was ${best.short}.` : ""}`,
       tone: you.overall < mid ? "good" : you.overall > mid ? "bad" : "neutral",
-      detail: bh ? `Simply buying and holding returned ${pct(bh.results.totalReturn)} with a ${pct(bh.results.maxDrawdown)} max drawdown. You returned ${pct(res.totalReturn)} with ${pct(res.maxDrawdown)}.` : "",
+      detail: bh ? `Simply buying and holding returned ${pct(bh.results.totalReturn)} with a max drawdown of ${pct(-bh.results.maxDrawdown)}. You returned ${pct(res.totalReturn)} with a max drawdown of ${pct(-res.maxDrawdown)}.` : "",
     });
   }
 
