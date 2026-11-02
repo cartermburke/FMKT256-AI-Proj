@@ -15,7 +15,11 @@ export const pct = (x, d = 1, signed = false) => {
   return `${sign}${v.replace("-", "−")}%`;
 };
 
-export const num = (x, d = 2) => (Number.isFinite(x) ? x.toFixed(d).replace("-", "−") : "–");
+export const num = (x, d = 2) => {
+  if (!Number.isFinite(x)) return "–";
+  const t = x.toFixed(d);
+  return /^-0(\.0+)?$/.test(t) ? t.slice(1) : t.replace("-", "−");
+};
 
 export const signClass = (x) => (x > 1e-9 ? "up" : x < -1e-9 ? "down" : "");
 

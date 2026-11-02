@@ -24,6 +24,7 @@ await new Promise((r) => setTimeout(r, 800));
 const errors = [];
 let failed = false;
 const tally = { passed: 0, failed: 0, checks: [] };
+const enabled = (pg) => pg.waitForFunction(() => !document.querySelector("#nextTurn").disabled, null, { timeout: 2000 }).then(() => true).catch(() => false);
 const check = (cond, msg) => {
   tally.checks.push({ ok: !!cond, msg });
   if (!cond) {
@@ -62,7 +63,7 @@ try {
   check((await rows.count()) === 5, "five strikes quoted");
   await rows.nth(3).locator("button.px").nth(0).click(); // 105% call, bid -> write
   check((await page.locator("#legsList li").count()) === 1, "leg added from quote click");
-  check(await page.isEnabled("#nextTurn"), "covered call is a valid order");
+  check(await enabled(page), "covered call is a valid order");
   await page.screenshot({ path: OUT + "02-game-ticket.png", fullPage: true });
   await page.click("#nextTurn");
   await page.waitForFunction(() => document.querySelector("#sTurn").textContent.startsWith("2 of"));
@@ -83,7 +84,7 @@ try {
   await page.selectOption("#legStrike", "105");
   await page.selectOption("#legSize", "0.5");
   await page.click("#addLeg");
-  check(await page.isEnabled("#nextTurn"), "short + long call is valid");
+  check(await enabled(page), "short + long call is valid");
   await page.click("#nextTurn");
   await page.waitForFunction(() => document.querySelector("#sTurn").textContent.startsWith("3 of"));
 
@@ -102,7 +103,7 @@ try {
   check(nRows === 7, `scorecard has You + 6 benchmarks (${nRows})`);
   check((await page.locator("#logTable tbody tr").count()) === 12, "month log has 12 rows");
   check((await page.locator("#coachNotes .note").count()) >= 3, "coach notes rendered");
-  for (const id of ["tSharpe", "tMdd", "tIrr", "tFinal"]) {
+  for (const id of ["tRank", "tSharpe", "tMdd", "tIrr", "tFinal"]) {
     const t = await page.textContent("#" + id);
     check(t && t !== "–" && !t.includes("NaN"), `tile ${id} = ${t}`);
   }
@@ -137,11 +138,64 @@ try {
   await page.selectOption("#autoStrat", "buyHold");
   await page.click("#autoRun");
   await page.waitForSelector("#resEquityChart canvas");
-  // Player's buy & hold must equal the buy & hold benchmark.
-  const youRow = await page.locator("#scoreTable tr.you td").nth(1).textContent();
-  const bhRow = await page.locator("#scoreTable tr", { hasText: "Buy & hold the stock" }).locator("td").nth(1).textContent();
+  // Player's buy & hold must equal the buy & hold benchmark (ending value column).
+  const youRow = await page.locator("#scoreTable tr.you td").nth(5).textContent();
+  const bhRow = await page.locator("#scoreTable tr", { hasText: "Buy & hold the stock" }).locator("td").nth(5).textContent();
   check(youRow === bhRow, `autopilot buy & hold matches the benchmark (${youRow} vs ${bhRow})`);
   await page.screenshot({ path: OUT + "06-results-full.png", fullPage: true });
+
+  // Review regressions --------------------------------------------------------
+  // (1) Options can't bypass the leverage cap through the UI.
+  await page.goto(`http://127.0.0.1:${PORT}/#/`);
+  await page.click("#startQuick");
+  await page.waitForSelector("#priceChart canvas");
+  await page.selectOption("#legSide", "B");
+  await page.selectOption("#legType", "C");
+  await page.selectOption("#legStrike", "90");
+  await page.selectOption("#legSize", "2");
+  await page.click("#addLeg");
+  await page.click('.quick-btns button[data-x="100"]');
+  check(!(await page.isEnabled("#nextTurn")), "stock 100% + deep ITM calls on 200% is rejected");
+  check((await page.textContent("#errors")).includes("Net long exposure"), "error explains the net-exposure cap");
+  // (2) A 5th leg is refused with a message instead of silently dropping one.
+  await page.locator("#legsList li button").first().click();
+  for (let i = 0; i < 5; i++) {
+    await page.selectOption("#legSize", "0.1");
+    await page.click("#addLeg");
+  }
+  check((await page.locator("#legsList li").count()) === 4, "at most 4 legs kept");
+  check((await page.textContent("#errors")).includes("at most 4"), "5th leg explained");
+  // (3) Resume card after leaving a game.
+  await page.click('.nav a[data-nav="how"]');
+  await page.click('.nav a[data-nav="home"]');
+  const resumeShown = await page.waitForSelector("#resumeCard:not([hidden])", { timeout: 2000 }).then(() => true).catch(() => false);
+  check(resumeShown, "home shows a resume card for the game in progress");
+  await page.click("#resumeBtn");
+  await page.waitForSelector("#screen-game:not([hidden])");
+  check(true, "resume returns to the game");
+  // (4) Levered month then autopilot: never throws, always finishes.
+  for (const strat of ["cash", "buyHold"]) {
+    await page.goto(`http://127.0.0.1:${PORT}/#/`);
+    await page.click("#startQuick");
+    await page.waitForSelector("#priceChart canvas");
+    await page.click('.quick-btns button[data-x="150"]');
+    await page.click("#nextTurn");
+    await page.waitForFunction(() => document.querySelector("#sTurn").textContent.startsWith("2 of"));
+    await page.waitForTimeout(400);
+    check(await enabled(page), `keep-current is allowed after a 150% month (${strat})`);
+    await page.click(".autopilot summary");
+    await page.selectOption("#autoStrat", strat);
+    await page.click("#autoRun");
+    await page.waitForSelector("#screen-results:not([hidden])", { timeout: 10000 });
+    const expCells = await page.locator("#logTable tbody tr td:nth-child(3)").allTextContents();
+    const tail = expCells.slice(1);
+    const want = strat === "cash" ? "0%" : "100%";
+    check(tail.length === 11 && tail.every((t) => t === want || (strat === "buyHold" && t !== "")), `autopilot ${strat} after a levered month finishes (months 2-12: ${tail.slice(0, 3).join(",")}…)`);
+  }
+  // (5) A crafted replay link is rejected with a message.
+  await page.goto(`http://127.0.0.1:${PORT}/#/replay/${Buffer.from(JSON.stringify({ c: { v: 1, sym: "VIX", end: "2026-10-30", fullTurns: 60, startTurn: 0, turns: -5, blind: true }, a: [] })).toString("base64url")}`);
+  await page.waitForTimeout(800);
+  check((await page.textContent("#staleBanner")).includes("isn't valid"), "invalid replay link is rejected");
 
   // How it works + data pages.
   await page.goto(`http://127.0.0.1:${PORT}/#/data`);
@@ -168,7 +222,17 @@ try {
   await pm.waitForSelector("#priceChart canvas");
   const overflow = await pm.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
   check(overflow <= 1, `no horizontal scroll on mobile (overflow ${overflow}px)`);
+  await pm.click(".autopilot summary");
+  const overflow2 = await pm.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+  check(overflow2 <= 1, `no horizontal scroll on mobile with autopilot open (overflow ${overflow2}px)`);
   await pm.screenshot({ path: OUT + "10-mobile-game.png", fullPage: true });
+  await pm.click("#autoRun");
+  await pm.waitForSelector("#resEquityChart canvas");
+  const overflow3 = await pm.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+  check(overflow3 <= 1, `no horizontal scroll on mobile results (overflow ${overflow3}px)`);
+  const tableFits = await pm.evaluate(() => { const w = document.querySelector("#scoreTable"); return w.scrollWidth <= w.parentElement.clientWidth + 1; });
+  check(tableFits, "mobile scorecard fits without sideways scrolling");
+  await pm.screenshot({ path: OUT + "11-mobile-results.png", fullPage: true });
   await mobile.close();
 
   check(errors.length === 0, `no console/page errors${errors.length ? ": " + errors.join(" | ") : ""}`);

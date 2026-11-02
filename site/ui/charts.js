@@ -82,7 +82,7 @@ export function makeChart(spec) {
       height: spec.height ?? 280,
       padding: [10, 12, 0, 4],
       scales: {
-        x: { time: !!spec.xTime },
+        x: spec.xRange ? { time: !!spec.xTime, range: () => spec.xRange() } : { time: !!spec.xTime },
         y: {
           distr: spec.yLog ? 3 : 1,
           range: spec.yRange ?? ((u, min, max) => {

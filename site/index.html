@@ -33,7 +33,12 @@
       <div class="hero">
         <p class="eyebrow">A five-year stock &amp; options challenge</p>
         <h1>Five years. One stock. Its options.<br>No hindsight.</h1>
-        <p class="lede">You get <strong>$100,000</strong> and a stock drawn at random from real market history. Its name and dates are hidden and the price starts at 100, so you can't trade on what you remember. Each turn is one month: set your stock position, long or short, and trade one-month calls and puts. At the end the stock is revealed and you're scored on <strong>Sharpe ratio</strong>, <strong>maximum drawdown</strong> and <strong>IRR</strong> against five autopilot strategies.</p>
+        <p class="lede">You get <strong>$100,000</strong> and a stock drawn at random from real market history. Its name and dates are hidden and the price starts at 100, so you can't trade on what you remember. Each turn is one month: set your stock position, long or short, and trade one-month calls and puts. At the end the stock is revealed and you're scored on <strong>Sharpe ratio</strong>, <strong>maximum drawdown</strong> and <strong>IRR</strong> against six benchmark strategies played on the same data.</p>
+      </div>
+
+      <div class="resume card" id="resumeCard" hidden>
+        <div><strong>Game in progress</strong><br><span class="muted small" id="resumeText"></span></div>
+        <button class="btn-primary" id="resumeBtn" type="button">Resume ▸</button>
       </div>
 
       <div class="mode-grid">
@@ -74,7 +79,7 @@
         <div class="stat"><span class="stat-label">Cash</span><span class="stat-value" id="sCash">–</span></div>
         <div class="stat"><span class="stat-label">Implied vol</span><span class="stat-value" id="sIv">–</span></div>
       </div>
-      <div id="turnToast" class="toast" hidden></div>
+      <div id="turnToast" class="toast" role="status" aria-live="polite" hidden></div>
 
       <div class="game-grid">
         <div class="charts-col">
@@ -121,11 +126,14 @@
               </div>
               <div class="table-wrap">
                 <table class="quotes" id="quotesTable" aria-label="Option quotes">
-                  <thead><tr><th>Strike</th><th colspan="2">Call bid / ask</th><th colspan="2">Put bid / ask</th></tr></thead>
+                  <thead>
+                    <tr><th rowspan="2">Strike</th><th rowspan="2">IV</th><th colspan="2">Call</th><th colspan="2">Put</th></tr>
+                    <tr class="sub"><th>Bid</th><th>Ask</th><th>Bid</th><th>Ask</th></tr>
+                  </thead>
                   <tbody></tbody>
                 </table>
               </div>
-              <p class="hint">Premium per share (stock ≈ 100 at the start). Click a price to add that leg.</p>
+              <p class="hint">Premium per share. Click a <strong>bid</strong> to write (sell) that option or an <strong>ask</strong> to buy it, at the size chosen below. IV shows the volatility smile: puts are priced richer than calls.</p>
               <div class="leg-builder">
                 <select id="legSide" aria-label="Buy or write"><option value="B">Buy</option><option value="W">Write</option></select>
                 <select id="legType" aria-label="Call or put"><option value="C">Call</option><option value="P">Put</option></select>
@@ -151,6 +159,7 @@
             <details class="autopilot">
               <summary>Autopilot</summary>
               <p class="hint">Let a rule play the remaining months for you.</p>
+              <p class="hint" id="autoDesc"></p>
               <div class="leg-builder">
                 <select id="autoStrat" aria-label="Autopilot strategy"></select>
                 <button type="button" id="autoRun" class="btn-secondary">Finish the game</button>
@@ -170,6 +179,7 @@
       </div>
 
       <div class="tiles">
+        <div class="tile"><span class="tile-label">Overall rank</span><span class="tile-value" id="tRank">–</span><span class="tile-sub" id="tRankSub"></span></div>
         <div class="tile"><span class="tile-label">Sharpe ratio</span><span class="tile-value" id="tSharpe">–</span><span class="tile-sub" id="tSharpeSub"></span></div>
         <div class="tile"><span class="tile-label">Max drawdown</span><span class="tile-value" id="tMdd">–</span><span class="tile-sub" id="tMddSub"></span></div>
         <div class="tile"><span class="tile-label">IRR (annualized)</span><span class="tile-value" id="tIrr">–</span><span class="tile-sub" id="tIrrSub"></span></div>
@@ -177,12 +187,12 @@
       </div>
 
       <div class="card">
-        <div class="card-head"><h2>Scorecard</h2><span class="muted small">Ranked by Sharpe ratio. Every strategy pays the same costs on the same data.</span></div>
+        <div class="card-head"><h2>Scorecard</h2><span class="muted small">Ranked on all three judged metrics: the average of each strategy's Sharpe, max-drawdown and IRR ranks (the small #). Every strategy pays the same costs on the same data.</span></div>
         <div class="table-wrap">
           <table class="score" id="scoreTable">
             <thead><tr>
-              <th>Strategy</th><th class="num">Ending value</th><th class="num">Total return</th><th class="num">IRR</th>
-              <th class="num">Sharpe</th><th class="num">Sortino</th><th class="num">Max DD</th><th class="num">Volatility</th><th class="num">Beta</th>
+              <th class="num">#</th><th>Strategy</th><th class="num">Sharpe</th><th class="num">Max DD</th><th class="num">IRR</th>
+              <th class="num opt">Ending value</th><th class="num opt">Total return</th><th class="num opt">Sortino</th><th class="num opt">Volatility</th><th class="num opt">Beta</th>
             </tr></thead>
             <tbody></tbody>
           </table>
@@ -199,7 +209,7 @@
           <div class="chart chart-short" id="resDdChart"></div>
         </div>
         <div class="card">
-          <div class="card-head"><h2>Your stock exposure by month</h2><span class="muted small">Long above zero, short below</span></div>
+          <div class="card-head"><h2>Your net exposure by month</h2><span class="muted small">Stock plus option delta · long above zero, short below</span></div>
           <div class="chart chart-short" id="resExpChart"></div>
         </div>
       </div>
@@ -237,17 +247,19 @@
         <li><strong>The stock:</strong> drawn at random from a pool of stocks with very different histories (moonshots, decliners, cyclicals, defensives, and the S&amp;P 500 itself). In blind mode the ticker and calendar dates are hidden and the price is rebased to 100 on day one; returns are unchanged.</li>
         <li><strong>Window:</strong> the full challenge covers the most recent 60 months (1,260 trading days) ending at the latest close in the data. A quick round is a 12-month slice of that window. Each turn is exactly 21 trading days.</li>
         <li><strong>Stock position:</strong> set as a percent of equity, from −100% (short) to +150% (long on margin). Stock trades cost 5 basis points. If you don't touch the slider, your share count is unchanged.</li>
-        <li><strong>Options:</strong> European calls and puts at 90/95/100/105/110% of the current price, expiring at the end of the month (21 trading days), cash-settled at intrinsic value. Size is a percent of equity notional (e.g. "on 100%" = options on as many shares as your equity would buy). Up to four legs per month.</li>
-        <li><strong>Writing options:</strong> written calls must be covered by long shares; written puts must be cash-secured by equity not already in the stock.</li>
-        <li><strong>Financing:</strong> idle cash earns the 13-week T-bill yield (^IRX) daily. Margin debit pays T-bill + 1.5%. Short positions pay a 0.5%/yr borrow fee. Borrowing is capped at 50% of equity.</li>
-        <li><strong>Risk controls:</strong> the account is marked to market at every daily close. If equity falls below 25% of the gross stock position, a margin call liquidates the stock and closes all options. If equity hits zero, the game is over.</li>
+        <li><strong>Options:</strong> European calls and puts at 90/95/100/105/110% of the current price, expiring at the end of the month (21 trading days), cash-settled at intrinsic value. Size is a percent of equity notional (e.g. "size 100%" = options on as many shares as your equity would buy). Up to four legs per month, and at most 200% of equity notional across all legs.</li>
+        <li><strong>Leverage cap includes options:</strong> your <em>net</em> exposure, meaning the stock plus the delta of every option leg, must stay between −100% and +150% when you place an order. Options can't be used to get around the stock limits.</li>
+        <li><strong>Writing options:</strong> written calls must be covered by long shares. Written puts must be cash-secured: after the whole order you need cash at least equal to the strike value, not counting short-sale proceeds.</li>
+        <li><strong>Financing:</strong> idle cash (including short-sale proceeds) earns the 13-week T-bill yield (^IRX) daily. Margin debit pays T-bill + 1.5%. Short positions pay a 0.5%/yr borrow fee. An order can't take borrowing above 50% of equity.</li>
+        <li><strong>Drift and risk controls:</strong> the limits above apply to orders. Between orders, positions drift with the market, and you can always keep or reduce a position that has drifted past a limit. The account is marked to market at every daily close, including option-expiry days. If equity falls below 25% of the gross stock position, a margin call liquidates the stock and closes all options. If equity hits zero, the game is over, the rest of the window counts as zero, and the account ranks last.</li>
       </ul>
 
       <h2>Option pricing</h2>
       <p>Historical option quotes for every stock aren't freely available, so options are priced with Black-Scholes on an implied volatility built from market data on each day:</p>
-      <p class="formula">IV² = RV<sub>63</sub>(stock)² + [ (VIX/100)² − RV<sub>63</sub>(S&amp;P 500)² ]</p>
-      <p>RV<sub>63</sub> is trailing 63-day realized volatility. The bracket is the market's <em>variance risk premium</em> on that day: how much option buyers are paying for S&amp;P 500 volatility above what the index has actually been delivering. Adding it once, in variance units, prices SPY options exactly at the VIX. It gives low-volatility stocks a noticeable premium and high-volatility stocks a small one, consistent with research showing the volatility risk premium is concentrated in index options. Implied vol is floored at 75% of the stock's realized vol (and at 8%). You buy at the ask and sell at the bid: a half-spread of 2.5% of the premium, with a minimum of 5 bp of the stock price. The risk-free rate is the T-bill yield. Because the price series is total-return adjusted, the model treats the stock as non-dividend-paying.</p>
-      <p>An earlier version multiplied each stock's realized vol by the VIX/realized ratio of the index. That made covered calls beat buy-and-hold on almost every stock, which isn't what happens in real markets, so it was replaced.</p>
+      <p class="formula">IV<sub>atm</sub>² = RV<sub>63</sub>(stock)² + [ (0.88 × VIX/100)² − RV<sub>63</sub>(S&amp;P 500)² ]</p>
+      <p class="formula">IV(K) = IV<sub>atm</sub> × (1 − skew × ln(K/S))</p>
+      <p>RV<sub>63</sub> is trailing 63-day realized volatility. The bracket is the market's <em>variance risk premium</em> on that day: how much option buyers pay for S&amp;P 500 volatility above what the index has actually been delivering. The VIX is a variance-swap level that includes the skew, so at-the-money index vol is taken as 0.88 × VIX. Adding the premium once, in variance units, prices at-the-money SPY options at 0.88 × VIX, and gives single stocks a small premium over their own realized vol. That is consistent with research showing the volatility risk premium is concentrated in index options. A smile is then applied across strikes: out-of-the-money puts are priced richer and calls cheaper, with a steeper skew for the index (3.0) than for single stocks (1.25). At-the-money vol is floored at 75% of the stock's realized vol, and every IV is kept between 8% and 250%. You buy at the ask and sell at the bid: a half-spread of 2.5% of the premium, with a minimum of 5 bp of the stock price. The risk-free rate is the T-bill yield. Because the price series is total-return adjusted, the model treats the stock as non-dividend-paying.</p>
+      <p><strong>How we got here.</strong> The first version multiplied each stock's realized vol by the index's VIX-to-realized ratio, and covered calls beat buy-and-hold on almost every stock. A second version priced every strike at the VIX level, and a 5%-out-of-the-money SPY covered call still beat SPY by 46 percentage points over five years. That is a modelling artifact: real buy-write indexes trailed the S&amp;P 500 in this bull market. Adding the at-the-money adjustment and the smile brings the benchmarks back in line with what real markets did.</p>
 
       <h2>Scoring</h2>
       <ul>
@@ -256,10 +268,11 @@
         <li><strong>Maximum drawdown:</strong> the largest peak-to-trough decline of the daily equity curve.</li>
         <li><strong>IRR:</strong> the money-weighted internal rate of return (XIRR, actual/365) of the account's cash flows. With a fixed stake there are only two flows (the $100,000 in and the ending value out), so IRR equals the compound annual growth rate. The engine computes a general XIRR so contributions could be added later.</li>
         <li><strong>Beta:</strong> covariance of your daily returns with SPY's, ÷ SPY's variance.</li>
+        <li><strong>Overall rank:</strong> the assignment judges on Sharpe, maximum drawdown <em>and</em> IRR, so every strategy is ranked on each of the three and ordered by the average of the three ranks, with ties broken by Sharpe. Sharpe alone can misorder things: a near-riskless account that trails T-bills slightly has a tiny negative excess return divided by a tiny volatility, which gives a very negative Sharpe. A busted account has no meaningful Sharpe and ranks last.</li>
       </ul>
 
       <h2>Benchmarks</h2>
-      <p>Every game is also played automatically by five rules on the same window, with the same costs: <strong>buy &amp; hold</strong> the stock; <strong>buy &amp; hold the S&amp;P 500</strong> (SPY); a <strong>covered call</strong> (long 100%, write 105% calls monthly); a <strong>protective put</strong> (long 100%, buy 95% puts monthly); a <strong>200-day trend</strong> rule (long 100% when the price is above its 200-day average, otherwise T-bills); and <strong>T-bills</strong> only.</p>
+      <p>Every game is also played automatically by six benchmark strategies on the same window, with the same costs: <strong>buy &amp; hold</strong> the stock; <strong>buy &amp; hold the S&amp;P 500</strong> (SPY); a <strong>covered call</strong> (long 100%, write 105% calls monthly); a <strong>protective put</strong> (long 100%, buy 95% puts monthly); a <strong>200-day trend</strong> rule (long 100% when the price is above its 200-day average, otherwise T-bills); and <strong>T-bills</strong> only.</p>
 
       <h2>Data &amp; updates</h2>
       <p>Daily dividend- and split-adjusted closes for every stock, SPY, the VIX and the 13-week T-bill yield are downloaded by a scheduled GitHub Actions job every weekday after the US close. The job validates each series (no gaps or non-finite values, plausible ranges, enough history), commits only when the data changed, and redeploys the site. Because the game window always ends at the latest close, it moves forward automatically as new data arrives. Adding a stock means adding one line to <code>config/tickers.json</code>: the next run downloads its full history with no code changes. See the <a href="#/data">Data</a> page for the current status.</p>
@@ -272,7 +285,8 @@
         <li>Option prices are model prices, not historical quotes. There is no volatility skew, so out-of-the-money puts are likely <em>cheaper</em> here than they were in real markets.</li>
         <li>Trades execute at the daily close. There are no intraday stops, and decisions are monthly.</li>
         <li>Fractional shares are allowed, and the market impact of trades is ignored beyond the fixed costs.</li>
-        <li>Pre-start history shown on the chart starts up to a year before the game begins. In blind mode the stock's identity can sometimes be inferred from the shape of its chart.</li>
+        <li>Pre-start history shown on the chart starts up to a year before the game begins. In blind mode the stock's identity can sometimes be inferred from the shape of its chart, or from the era revealed by the T-bill rate. Blind mode is honour-based: a static site has to download the price file, so a player who opens the browser's developer tools can see it.</li>
+        <li>Replay links reproduce a game exactly on the same data snapshot. When the data provider revises adjusted prices (e.g. after a dividend), a replay can differ by a few dollars.</li>
       </ul>
 
       <h2>About</h2>

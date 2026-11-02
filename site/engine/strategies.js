@@ -6,7 +6,8 @@ export const STRATEGIES = {
   buyHold: {
     label: "Buy & hold the stock",
     short: "Buy & hold",
-    fn: (ctx) => (ctx.turn === 0 ? { stock: 1, legs: [] } : { stock: null, legs: [] }),
+    // Buys once (on its first turn, even if it takes over mid-game), then never trades.
+    fn: (ctx, g, st) => (st && st.first ? { stock: 1, legs: [] } : { stock: null, legs: [] }),
   },
   coveredCall: {
     label: "Covered call (long 100%, write 105% calls monthly)",
@@ -26,7 +27,7 @@ export const STRATEGIES = {
   cash: {
     label: "T-bills only",
     short: "T-bills",
-    fn: () => ({ stock: null, legs: [] }),
+    fn: () => ({ stock: 0, legs: [] }),
   },
 };
 

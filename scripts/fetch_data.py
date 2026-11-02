@@ -26,6 +26,7 @@ import os
 import sys
 import time
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 import pandas as pd
 import requests
@@ -47,6 +48,49 @@ UA = {
 
 def log(msg: str) -> None:
     print(msg, flush=True)
+
+
+NY = ZoneInfo("America/New_York")
+
+
+def last_complete_session() -> dt.date:
+    """Latest date whose daily bar is final: today after 5pm New York time, else yesterday."""
+    now = dt.datetime.now(NY)
+    return now.date() if now.hour >= 17 else now.date() - dt.timedelta(days=1)
+
+
+def drop_unfinished(s: pd.Series) -> pd.Series:
+    """Drop an in-progress intraday bar so a run during market hours never publishes it as a close."""
+    cutoff = pd.Timestamp(last_complete_session())
+    return s[s.index <= cutoff]
+
+
+def stabilize(new: pd.Series, old_path: Path, kind: str) -> pd.Series:
+    """Keep previously published values when the provider only re-rounds them.
+
+    yfinance's adjusted closes jitter by ~1e-6 between pulls. If every overlapping value
+    matches the published file within 5e-5 (relative), reuse the old values and append only
+    new dates, so unchanged data produces no commit and replay links stay exact. A real
+    re-adjustment (e.g. after a dividend, typically ~1e-3 or more) replaces the series.
+    """
+    if not old_path.exists():
+        return new
+    try:
+        old = json.loads(old_path.read_text())
+        old_s = pd.Series(old["close"], index=pd.to_datetime(old["dates"]), dtype="float64")
+    except Exception:  # noqa: BLE001
+        return new
+    common = new.index.intersection(old_s.index)
+    if len(common) < 0.9 * len(old_s):
+        return new
+    a, b = new.loc[common].to_numpy(), old_s.loc[common].to_numpy()
+    denom = 1.0 if kind == "rate" else 1e-12
+    rel = abs(a - b) / (abs(b) + denom) if kind != "rate" else abs(a - b)
+    if rel.max() < (5e-5 if kind != "rate" else 1e-4):
+        merged = new.copy()
+        merged.loc[common] = old_s.loc[common]
+        return merged
+    return new
 
 
 # --------------------------------------------------------------------------- sources
@@ -180,6 +224,7 @@ def fetch_one(symbol: str, kind: str, start: dt.date, min_days: int) -> tuple[pd
             s = fn(symbol, start)
             s = s[~s.index.duplicated(keep="last")].sort_index()
             s = s[s.index >= pd.Timestamp(start)]
+            s = drop_unfinished(s)
             probs = validate(symbol, s, kind, min_days)
             if probs:
                 raise RuntimeError("; ".join(probs))
@@ -209,7 +254,8 @@ def main() -> int:
     cfg = json.loads(CONFIG.read_text())
     years = int(cfg.get("history_years", 7))
     start = dt.date.today() - dt.timedelta(days=int(365.25 * years))
-    min_days = int(252 * min(years, cfg.get("game_years", 5) + 0.5))
+    # The game needs game_years*12 turns of 21 days plus 200 days for the 200-day average.
+    min_days = int(cfg.get("game_years", 5)) * 12 * 21 + 200 + 40
 
     targets = [(t["symbol"], t["symbol"].replace("^", ""), t.get("name", t["symbol"]), "price")
                for t in cfg["pool"]]
@@ -230,6 +276,7 @@ def main() -> int:
         path = PRICE_DIR / f"{fname}.json"
         try:
             s, source = fetch_one(symbol, kind, start, min_days)
+            s = stabilize(s, path, kind)
             payload = series_payload(symbol, name, kind, source, s)
             text = json.dumps(payload, separators=(",", ":"))
             if not path.exists() or path.read_text() != text:

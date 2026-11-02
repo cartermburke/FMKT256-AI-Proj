@@ -1,7 +1,7 @@
 // Aligns the raw daily series (stock, SPY, VIX, T-bill) onto the stock's trading
 // calendar and precomputes realized vol, implied vol and the 200-day average.
 
-import { impliedVol, IV_PARAMS } from "./options.js";
+import { impliedVol, IV_PARAMS, INDEX_SYMBOLS } from "./options.js";
 
 /** As-of alignment: for each target date take the latest source value on or before it. */
 export function alignAsOf(targetDates, srcDates, srcVals) {
@@ -77,6 +77,7 @@ export function buildMarket(raw, { endDate } = {}) {
   return {
     symbol: raw.stock.symbol,
     name: raw.stock.name,
+    skew: INDEX_SYMBOLS.has(raw.stock.symbol) ? IV_PARAMS.skewIndex : IV_PARAMS.skewStock,
     dates,
     price: px,
     spy,

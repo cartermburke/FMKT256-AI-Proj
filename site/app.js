@@ -1,6 +1,7 @@
 // Blind Tape: UI controller. All market logic lives in engine/ (pure, unit-tested).
 import { buildMarket, firstUsableIndex } from "./engine/market.js";
-import { Game, RULES, normalizeAction } from "./engine/game.js";
+import { Game, RULES, normalizeAction, legalize } from "./engine/game.js";
+import { rankStrategies } from "./engine/scoring.js";
 import { STRATEGIES, runBenchmarks } from "./engine/strategies.js";
 import { debrief } from "./engine/coach.js";
 import { encodeReplay, decodeReplay } from "./engine/replay.js";
@@ -48,8 +49,8 @@ async function init() {
   route();
 }
 
-function fatal(e) {
-  console.error(e);
+function fatal(e, { quiet = false } = {}) {
+  if (!quiet) console.error(e);
   const b = $("staleBanner");
   b.hidden = false;
   b.textContent = `Something went wrong: ${e.message}`;
@@ -89,16 +90,26 @@ async function route() {
     return;
   }
   if (h === "#/play" && S.game && !S.game.over) { show("game"); renderGame(); return; }
+  if (h === "#/play" && S.game && S.game.over) { location.hash = "#/results"; return; }
   if (h === "#/results" && S.game && S.game.over) { show("results"); renderResults(); return; }
   if (h === "#/how") { show("how"); return; }
   if (h === "#/data") { show("data"); return; }
   show("home");
+  renderResume();
+}
+
+function renderResume() {
+  const card = $("resumeCard");
+  const active = S.game && !S.game.over;
+  card.hidden = !active;
+  if (active) $("resumeText").textContent = `Month ${S.game.turn + 1} of ${S.game.turns} · equity ${money(S.game.equity)}`;
 }
 
 // ------------------------------------------------------------------ home
 
 function wireStatic() {
   $("startFull").addEventListener("click", () => newGame("full"));
+  $("resumeBtn").addEventListener("click", () => { location.hash = "#/play"; });
   $("startQuick").addEventListener("click", () => newGame("quick"));
   $("optTicker").addEventListener("change", (e) => {
     if (e.target.value) $("optBlind").checked = false;
@@ -123,7 +134,10 @@ function wireStatic() {
   $("nextTurn").addEventListener("click", nextTurn);
   $("autoRun").addEventListener("click", runAutopilot);
   const sel = $("autoStrat");
-  for (const [k, v] of Object.entries(STRATEGIES)) sel.add(new Option(v.label, k));
+  for (const [k, v] of Object.entries(STRATEGIES)) sel.add(new Option(v.short, k));
+  const descr = () => { $("autoDesc").textContent = STRATEGIES[sel.value].label; };
+  sel.addEventListener("change", descr);
+  descr();
   for (const k of RULES.strikes) $("legStrike").add(new Option(`${k}% strike`, k, k === 100, k === 100));
 }
 
@@ -273,6 +287,7 @@ function renderGame(fresh = false) {
   if (!S.charts.equity) {
     S.charts.equity = makeChart({
       el: $("equityChart"), height: 220, xFmt: (v) => (S.cfg.blind ? `${v}` : xFmt(v)), yFmt: mFmt, xLabel: "When", xLabelFmt: monthLabelFor, xIncrs: [1, 2, 3, 6, 12, 24],
+      xRange: () => [0, Math.max(1, S.game.turn)],
       series: [
         { label: "You", colorVar: "--s1", width: 2, fmt: (v) => money(v) },
         { label: "Holding the stock", colorVar: "--s2", width: 2, fmt: (v) => money(v) },
@@ -301,7 +316,7 @@ function renderQuotes() {
   for (const row of q.rows) {
     const tr = document.createElement("tr");
     const kLabel = S.cfg.blind ? `${row.strike}%` : `${row.strike}% ($${realPx(row.K).toFixed(2)})`;
-    tr.innerHTML = `<td class="k">${kLabel}</td>`;
+    tr.innerHTML = `<td class="k">${kLabel}</td><td class="ivc">${pct(row.iv, 0)}</td>`;
     for (const type of ["C", "P"]) {
       for (const side of ["W", "B"]) {
         const td = document.createElement("td");
@@ -310,7 +325,8 @@ function renderQuotes() {
         b.type = "button";
         b.className = "px";
         b.textContent = f(side === "W" ? row[type].bid : row[type].ask);
-        b.title = `${side === "B" ? "Buy" : "Write"} the ${row.strike}% ${type === "C" ? "call" : "put"} at ${b.textContent}`;
+        b.title = `${side === "B" ? "Buy" : "Write (sell)"} the ${row.strike}% ${type === "C" ? "call" : "put"} at ${b.textContent}`;
+        b.setAttribute("aria-label", b.title);
         b.addEventListener("click", () => addLeg(side, type, row.strike, Number($("legSize").value)));
         td.appendChild(b);
         tr.appendChild(td);
@@ -318,13 +334,16 @@ function renderQuotes() {
     }
     tb.appendChild(tr);
   }
-  $("optMeta").textContent = `IV ${pct(q.iv, 1)} · T-bill ${pct(q.r, 2)} · expire in ${TD} trading days`;
+  $("optMeta").textContent = `At-the-money IV ${pct(q.iv, 1)} · T-bill ${pct(q.r, 2)} · expire in ${TD} trading days`;
 }
 
 function addLeg(side, type, strike, notional) {
   if (S.legs.length >= RULES.maxLegs) {
-    S.legs.shift();
+    S.legNote = `You can trade at most ${RULES.maxLegs} option legs a month. Remove one first.`;
+    updateTicket();
+    return;
   }
+  S.legNote = "";
   S.legs.push({ side, type, strike, notional });
   updateTicket();
 }
@@ -346,13 +365,13 @@ function updateTicket() {
   list.innerHTML = "";
   S.legs.forEach((l, i) => {
     const li = document.createElement("li");
-    const what = `${l.side === "B" ? "Buy" : "Write"} ${l.strike}% ${l.type === "C" ? "calls" : "puts"} on ${pct(l.notional, 0)} of equity`;
+    const what = `${l.side === "B" ? "Buy" : "Write"} ${l.strike}%-strike ${l.type === "C" ? "calls" : "puts"}, size ${pct(l.notional, 0)} of equity`;
     li.innerHTML = `<span>${what}</span>`;
     const rm = document.createElement("button");
     rm.type = "button";
     rm.setAttribute("aria-label", `Remove: ${what}`);
     rm.textContent = "×";
-    rm.addEventListener("click", () => { S.legs.splice(i, 1); updateTicket(); });
+    rm.addEventListener("click", () => { S.legs.splice(i, 1); S.legNote = ""; updateTicket(); });
     li.appendChild(rm);
     list.appendChild(li);
   });
@@ -367,25 +386,30 @@ function updateTicket() {
   if (p.legs.length) rows.push([prem >= 0 ? "Option premium received" : "Option premium paid", money(Math.abs(prem))]);
   if (p.costs > 0.5 || p.spread > 0.5) rows.push(["Trading costs + spread", money(p.costs + p.spread)]);
   rows.push(["Cash after orders", money(p.cash)]);
-  rows.push(["Stock exposure after", pct((p.shares * S0) / g.equity, 0)]);
+  rows.push(["Stock position after", pct((p.shares * S0) / g.equity, 0)]);
+  if (p.legs.length) rows.push(["Net exposure incl. option delta", pct(p.netExp, 0)]);
   $("preview").innerHTML = rows.map(([k, v]) => `<span>${k}</span><span class="v">${v}</span>`).join("");
   const errs = $("errors");
-  errs.innerHTML = chk.errors.map((e) => `<li>${e}</li>`).join("");
-  $("nextTurn").disabled = !chk.ok;
+  errs.innerHTML = [...chk.errors, ...(S.legNote ? [S.legNote] : [])].map((e) => `<li>${e}</li>`).join("");
+  $("nextTurn").disabled = !chk.ok || S.busy;
   $("nextTurn").textContent = g.turn + 1 >= g.turns ? "Finish & reveal ▸" : "Next month ▸";
 }
 
 function nextTurn() {
   const g = S.game;
+  if (!g || g.over || S.busy) return;
   const action = currentAction();
   const chk = g.check(action);
-  if (!chk.ok) return;
+  if (!chk.ok) { updateTicket(); return; }
+  S.busy = true;
+  setTimeout(() => { S.busy = false; if (S.game && !S.game.over) updateTicket(); }, 350);
   const before = g.equity;
   const t = g.play(action);
   S.actions.push(normalizeAction(action));
   S.legs = [];
+  S.legNote = "";
   S.stockTarget = null;
-  const you = g.equity / before - 1;
+  const you = (t.equityEnd ?? g.equity) / before - 1;
   let msg = `<strong>Month ${t.turn + 1}:</strong> stock ${pct(t.stockReturn, 1, true)} · you ${pct(you, 1, true)}`;
   if (t.action.legs.length) msg += ` · options ${t.optionPnl >= 0 ? "+" : "−"}${money(Math.abs(t.optionPnl))}`;
   if (t.marginCall) msg += " · <strong>margin call</strong>: positions were liquidated";
@@ -399,12 +423,19 @@ function runAutopilot() {
   const key = $("autoStrat").value;
   const fn = STRATEGIES[key].fn;
   const g = S.game;
-  while (!g.over) {
-    let a = fn(g.context(), g);
-    if (!g.check(a).ok) a = { stock: a.stock ?? null, legs: [] };
-    if (!g.check(a).ok) a = { stock: null, legs: [] };
-    g.play(a);
-    S.actions.push(normalizeAction(a));
+  const state = { first: true };
+  try {
+    while (!g.over) {
+      const a = legalize(g, fn(g.context(), g, state));
+      state.first = false;
+      if (!a) throw new Error("The autopilot couldn't find a legal order.");
+      g.play(a);
+      S.actions.push(a);
+    }
+  } catch (e) {
+    fatal(e);
+    renderGame();
+    return;
   }
   finish();
 }
@@ -433,7 +464,7 @@ function renderResults() {
   $("revealTitle").textContent = `${cfg.blind ? "It was " : ""}${p.name} (${cfg.sym})`;
   $("revealSub").textContent = `${fmtDate(d0)} to ${fmtDate(d1)} · ${g.turns} months${p.regime ? ` · ${p.regime}` : ""}. The stock returned ${pct(bh.totalReturn + 0, 0, true)} if simply held; you returned ${pct(res.totalReturn, 0, true)}.${g.busted ? " Your account was wiped out." : ""}`;
 
-  $("tSharpe").textContent = num(res.sharpe);
+  $("tSharpe").textContent = res.busted ? "bust" : num(res.sharpe);
   $("tSharpeSub").textContent = `Buy & hold: ${num(bh.sharpe)}`;
   $("tMdd").textContent = pct(-res.maxDrawdown, 1);
   $("tMddSub").textContent = `Buy & hold: ${pct(-bh.maxDrawdown, 1)}`;
@@ -442,18 +473,24 @@ function renderResults() {
   $("tFinal").textContent = money(res.finalValue);
   $("tFinalSub").textContent = `from $100,000 (${pct(res.totalReturn, 0, true)})`;
 
-  // Scorecard
-  const rows = [{ key: "you", short: "You", label: "You", results: res }, ...benches]
-    .sort((a, b) => (Number.isFinite(b.results.sharpe) ? b.results.sharpe : -99) - (Number.isFinite(a.results.sharpe) ? a.results.sharpe : -99));
+  // Scorecard: ranked on all three judged metrics (Sharpe, max drawdown, IRR).
+  const rows = rankStrategies([{ key: "you", short: "You", label: "You", results: res }, ...benches]);
+  const you = rows.find((r) => r.key === "you");
+  $("tRank").textContent = `${you.overall} of ${rows.length}`;
+  $("tRankSub").textContent = `Sharpe #${you.ranks.sharpe} · drawdown #${you.ranks.maxDrawdown} · IRR #${you.ranks.irr}`;
   const tb = $("scoreTable").querySelector("tbody");
+  const sharpeTxt = (x) => (x.busted ? "bust" : num(x.sharpe));
+  const sup = (n) => `<sup class="rk">#${n}</sup>`;
   tb.innerHTML = rows.map((r) => {
     const x = r.results;
     const c = STRAT_COLORS[r.key];
     const sw = c ? `<span class="key" style="background:var(${c})"></span>` : `<span class="key"></span>`;
-    return `<tr class="${r.key === "you" ? "you" : ""}"><td>${sw}${r.key === "you" ? "You" : r.label}</td>
-      <td class="num">${money(x.finalValue)}</td><td class="num ${signClass(x.totalReturn)}">${pct(x.totalReturn, 1, true)}</td>
-      <td class="num">${pct(x.irr, 1, true)}</td><td class="num">${num(x.sharpe)}</td><td class="num">${num(x.sortino)}</td>
-      <td class="num">${pct(-x.maxDrawdown, 1)}</td><td class="num">${pct(x.vol, 1)}</td><td class="num">${num(x.beta)}</td></tr>`;
+    const name = r.key === "you" ? "You" : `<span class="lbl-long">${r.label}</span><span class="lbl-short">${r.short}</span>`;
+    return `<tr class="${r.key === "you" ? "you" : ""}"><td class="num rank">${r.overall}</td><td class="name">${sw}${name}</td>
+      <td class="num">${sharpeTxt(x)}${sup(r.ranks.sharpe)}</td><td class="num">${pct(-x.maxDrawdown, 1)}${sup(r.ranks.maxDrawdown)}</td>
+      <td class="num">${pct(x.irr, 1, true)}${sup(r.ranks.irr)}</td>
+      <td class="num opt">${money(x.finalValue)}</td><td class="num opt ${signClass(x.totalReturn)}">${pct(x.totalReturn, 1, true)}</td>
+      <td class="num opt">${x.busted ? "–" : num(x.sortino)}</td><td class="num opt">${pct(x.vol, 1)}</td><td class="num opt">${num(x.beta)}</td></tr>`;
   }).join("");
 
   // Equity curves (time axis)
@@ -484,10 +521,12 @@ function renderResults() {
   });
 
   const mx = g.log.map((t) => t.turn + 1);
-  const longs = g.log.map((t) => (t.exposure > 1e-6 ? t.exposure : null));
-  const shorts = g.log.map((t) => (t.exposure < -1e-6 ? t.exposure : null));
+  const netOf = (t) => (Number.isFinite(t.netExposure) ? t.netExposure : t.exposure);
+  const longs = g.log.map((t) => (netOf(t) > 1e-6 ? netOf(t) : null));
+  const shorts = g.log.map((t) => (netOf(t) < -1e-6 ? netOf(t) : null));
   S.charts.resExp = makeChart({
     el: $("resExpChart"), height: 220, yFmt: (v) => pct(v, 0), xFmt: (v) => `${v}`, zeroLine: true, xIncrs: [1, 2, 3, 6, 12],
+    xRange: () => [0.5, g.log.length + 0.5],
     xLabel: "Month", xLabelFmt: (v) => `Month ${v}`,
     yRange: (u, min, max) => [Math.min(-0.25, (min ?? 0) * 1.1), Math.max(0.25, (max ?? 0) * 1.1)],
     series: [
@@ -505,8 +544,8 @@ function renderResults() {
   $("logTable").querySelector("tbody").innerHTML = g.log.map((t) => {
     const legs = t.action.legs.map((l) => `${l.side === "B" ? "Buy" : "Write"} ${l.strike}${l.type} ×${pct(l.notional, 0)}`).join(", ") || "–";
     const yr = t.equityEnd / t.equityStart - 1;
-    return `<tr><td>${t.turn + 1}${cfg.blind ? "" : ` · ${fmtMonthYear(S.market.dates[t.startIdx])}`}</td><td class="num ${signClass(t.stockReturn)}">${pct(t.stockReturn, 1, true)}</td>
-      <td class="num">${pct(t.exposure, 0)}</td><td>${legs}</td><td class="num">${t.action.legs.length ? money(t.optionPnl) : "–"}</td>
+    return `<tr><td>${t.turn + 1}${cfg.blind ? "" : ` · from ${fmtDate(S.market.dates[t.startIdx])}`}</td><td class="num ${signClass(t.stockReturn)}">${pct(t.stockReturn, 1, true)}</td>
+      <td class="num">${pct(netOf(t), 0)}</td><td>${legs}</td><td class="num">${t.action.legs.length ? money(t.optionPnl) : "–"}</td>
       <td class="num ${signClass(yr)}">${pct(yr, 1, true)}</td><td class="num">${money(t.equityEnd)}</td></tr>`;
   }).join("");
   $("copyMsg").textContent = "";
@@ -530,6 +569,7 @@ async function copyReplay() {
 async function openReplay(code) {
   try {
     const { cfg, actions } = decodeReplay(code);
+    validateReplayCfg(cfg, actions);
     await setupGame(cfg);
     for (const a of actions) {
       if (S.game.over) break;
@@ -543,9 +583,23 @@ async function openReplay(code) {
     show("results");
     renderResults();
   } catch (e) {
-    fatal(e);
+    fatal(e, { quiet: true });
     show("home");
+    renderResume();
   }
+}
+
+function validateReplayCfg(cfg, actions) {
+  const fullTurns = (S.meta.game_years || 5) * 12;
+  const bad = (m) => { throw new Error(`This replay link isn't valid (${m}).`); };
+  if (!cfg || typeof cfg !== "object") bad("no game settings");
+  if (!poolInfo().some((p) => p.symbol === cfg.sym)) bad("unknown stock");
+  if (cfg.fullTurns !== fullTurns) bad("different game length");
+  if (![12, fullTurns].includes(cfg.turns)) bad("unsupported number of months");
+  if (!Number.isInteger(cfg.startTurn) || cfg.startTurn < 0 || cfg.startTurn > fullTurns - cfg.turns) bad("bad start month");
+  if (typeof cfg.end !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(cfg.end) || cfg.end > S.meta.as_of) bad("bad end date");
+  if (!Array.isArray(actions) || actions.length > cfg.turns) bad("bad action list");
+  cfg.blind = !!cfg.blind;
 }
 
 // ------------------------------------------------------------------ data page

@@ -2,10 +2,11 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { normCdf, bsPrice, impliedVol, tradePrice, intrinsic } from "../site/engine/options.js";
+import { normCdf, bsPrice, impliedVol, smileVol, tradePrice, intrinsic } from "../site/engine/options.js";
 import { maxDrawdown, sharpe, sortino, xirr, cagr, dailyReturns, beta, stdev, mean } from "../site/engine/metrics.js";
 import { buildMarket, realizedVol, sma, alignAsOf } from "../site/engine/market.js";
-import { Game, RULES, autoplay } from "../site/engine/game.js";
+import { Game, RULES, autoplay, legalize } from "../site/engine/game.js";
+import { rankStrategies } from "../site/engine/scoring.js";
 import { runBenchmarks, STRATEGIES } from "../site/engine/strategies.js";
 import { mulberry32 } from "../site/engine/rng.js";
 import { debrief } from "../site/engine/coach.js";
@@ -67,14 +68,22 @@ test("Black-Scholes textbook values and put-call parity", () => {
   assert.equal(intrinsic("P", 80, 100), 20);
 });
 
-test("implied vol adds the index variance premium to stock variance", () => {
-  // stock RV 30%, SPY RV 15%, VIX 18 -> sqrt(.09 + .0324 - .0225)
-  close(impliedVol(0.3, 0.15, 18), Math.sqrt(0.0999), 1e-12);
-  // SPY itself is priced at the VIX
-  close(impliedVol(0.15, 0.15, 18), 0.18, 1e-12);
+test("ATM implied vol adds the index variance premium (measured at 0.88 x VIX) to stock variance", () => {
+  // stock RV 30%, SPY RV 15%, VIX 18 -> sqrt(.09 + (0.88*.18)^2 - .0225)
+  close(impliedVol(0.3, 0.15, 18), Math.sqrt(0.09 + (0.88 * 0.18) ** 2 - 0.0225), 1e-12);
+  // SPY itself: at-the-money vol = 0.88 x VIX
+  close(impliedVol(0.15, 0.15, 18), 0.88 * 0.18, 1e-12);
   // when realized index vol exceeds the VIX, the stock IV is floored at 75% of its RV
   close(impliedVol(0.3, 0.5, 20), 0.225, 1e-12);
   close(impliedVol(0.01, 0.15, 12), 0.08, 1e-12); // absolute floor
+});
+
+test("volatility smile: puts richer, calls cheaper, clipped", () => {
+  close(smileVol(0.2, 1, 1.25), 0.2, 1e-12);
+  close(smileVol(0.2, 0.95, 1.25), 0.2 * (1 - 1.25 * Math.log(0.95)), 1e-12);
+  assert.ok(smileVol(0.2, 0.9, 3) > smileVol(0.2, 0.95, 3));
+  assert.ok(smileVol(0.2, 1.1, 3) < smileVol(0.2, 1.05, 3));
+  close(smileVol(0.2, 0.5, 3), 0.4, 1e-12); // clipped at 2x ATM
 });
 
 test("trade price adds/subtracts half-spread with a floor", () => {
@@ -190,8 +199,8 @@ test("written calls must be covered and puts cash-secured", () => {
   assert.equal(c.ok, false, "no free equity when 100% long");
   c = g.check({ stock: 0, legs: [{ side: "W", type: "P", strike: 100, notional: 1 }] });
   assert.equal(c.ok, true);
-  c = g.check({ stock: 0, legs: [{ side: "W", type: "P", strike: 110, notional: 1 }] });
-  assert.equal(c.ok, false, "strike notional 110% > equity");
+  c = g.check({ stock: 0, legs: [{ side: "W", type: "P", strike: 110, notional: 1.2 }] });
+  assert.equal(c.ok, false, "strike value 132% of equity > cash");
   c = g.check({ stock: 0.5, legs: [{ side: "W", type: "P", strike: 100, notional: 0.5 }] });
   assert.equal(c.ok, true);
 });
@@ -304,4 +313,101 @@ test("replay encoding round-trips", () => {
   const back = decodeReplay(s);
   assert.deepEqual(back.cfg, cfg);
   assert.deepEqual(back.actions, log);
+});
+
+// ---------------------------------------------------------------- review regressions
+
+test("options cannot bypass the leverage caps", () => {
+  const g = newGame(wiggle);
+  const four = new Array(4).fill({ side: "B", type: "C", strike: 90, notional: 2 });
+  assert.equal(g.check({ stock: 0, legs: four }).ok, false, "4 x 200% calls rejected");
+  assert.equal(g.check({ stock: 0, legs: [{ side: "B", type: "C", strike: 100, notional: 1.5 }, { side: "B", type: "P", strike: 100, notional: 0.6 }] }).ok, false, "total notional > 200%");
+  assert.equal(g.check({ stock: 0, legs: [{ side: "B", type: "C", strike: 100, notional: 1 }, { side: "B", type: "P", strike: 100, notional: 1 }] }).ok, true, "straddle on 100% is fine");
+  const c = g.check({ stock: 1, legs: [{ side: "B", type: "C", strike: 90, notional: 1 }] });
+  assert.equal(c.ok, false, "stock 100% + deep ITM calls exceeds 150% net");
+  assert.ok(c.errors.some((e) => e.includes("Net long exposure")));
+  assert.equal(g.check({ stock: -1, legs: [{ side: "B", type: "P", strike: 110, notional: 1 }] }).ok, false, "short 100% + ITM puts exceeds -100% net");
+  assert.equal(g.check({ stock: 1, legs: [{ side: "B", type: "P", strike: 95, notional: 1 }] }).ok, true, "protective put lowers net exposure");
+});
+
+test("written puts are secured by cash left after the whole order", () => {
+  const g = newGame(wiggle);
+  // 50% long leaves 50% cash: enough to secure puts on 50%, unless the order spends it on calls.
+  const put = { side: "W", type: "P", strike: 100, notional: 0.5 };
+  assert.equal(g.check({ stock: 0.5, legs: [put] }).ok, true);
+  assert.equal(g.check({ stock: 0.5, legs: [put, { side: "B", type: "C", strike: 100, notional: 0.5 }] }).ok, false);
+  // Short-sale proceeds don't secure puts: only the account's own cash does.
+  assert.equal(g.check({ stock: -1, legs: [{ side: "W", type: "P", strike: 95, notional: 0.9 }] }).ok, true);
+  assert.equal(g.check({ stock: -1, legs: [{ side: "W", type: "P", strike: 100, notional: 1.2 }] }).ok, false);
+});
+
+test("holding a drifted position is always allowed; adding borrowing is not", () => {
+  const start = 250;
+  const path = (i) => (i <= start ? wiggle(i) / wiggle(start) * 100 : 100 - 8 * Math.min(1, (i - start) / 21));
+  const g = newGame(path, { startIdx: start, turns: 3 });
+  g.play({ stock: 1.5, legs: [] });
+  assert.ok(g.cash < -0.5 * g.equity, "borrowing drifted above 50%");
+  assert.equal(g.check({ stock: null, legs: [] }).ok, true, "keep current is allowed");
+  assert.equal(g.check({ stock: null, legs: [{ side: "B", type: "P", strike: 95, notional: 0.5 }] }).ok, false, "buying puts on more margin is not");
+  assert.equal(g.check({ stock: 1.2, legs: [] }).ok, true, "reducing is allowed");
+});
+
+test("maintenance margin is also checked on the expiry close", () => {
+  const start = 250;
+  const path = (i) => (i <= start ? wiggle(i) / wiggle(start) * 100 : i < start + 21 ? 100 : 170);
+  const g = newGame(path, { startIdx: start, turns: 3 });
+  g.play({ stock: -1, legs: [] });
+  assert.equal(g.events.length, 1);
+  assert.equal(g.events[0].kind, "margin");
+  assert.equal(g.events[0].idx, start + 21);
+  assert.equal(g.shares, 0);
+});
+
+test("a bust pads the curve to the window end and has no Sharpe", () => {
+  const start = 250;
+  const path = (i) => (i <= start ? wiggle(i) / wiggle(start) * 100 : i < start + 3 ? 100 : 260);
+  const g = newGame(path, { startIdx: start, turns: 3 });
+  g.play({ stock: -1, legs: [] });
+  assert.equal(g.curve.equity.length, 3 * 21 + 1);
+  assert.equal(g.curve.idx[g.curve.idx.length - 1], g.endIdx);
+  const res = g.results();
+  assert.ok(Number.isNaN(res.sharpe));
+  assert.equal(res.irr, -1);
+  const ranked = rankStrategies([{ key: "you", results: res }, { key: "cash", results: { sharpe: 0, maxDrawdown: 0, irr: 0.03 } }]);
+  assert.equal(ranked[ranked.length - 1].key, "you");
+});
+
+test("autopilot taking over mid-game follows its own rule", () => {
+  // T-bills after a long month -> flat.
+  let g = newGame(wiggle, { turns: 6 });
+  g.play({ stock: 1, legs: [] });
+  autoplay(g, STRATEGIES.cash.fn);
+  assert.ok(g.log.slice(1).every((t) => Math.abs(t.exposure) < 1e-9));
+  // Buy & hold after a short month -> buys 100% once.
+  g = newGame(wiggle, { turns: 6 });
+  g.play({ stock: -1, legs: [] });
+  autoplay(g, STRATEGIES.buyHold.fn);
+  close(g.log[1].exposure, 1, 1e-9);
+  // Never throws after a levered losing month.
+  const start = 250;
+  const path = (i) => (i <= start ? wiggle(i) / wiggle(start) * 100 : 100 - 6 * Math.min(1, (i - start) / 21));
+  g = newGame(path, { startIdx: start, turns: 4 });
+  g.play({ stock: 1.5, legs: [] });
+  for (const k of Object.keys(STRATEGIES)) {
+    const h = newGame(path, { startIdx: start, turns: 4 });
+    h.play({ stock: 1.5, legs: [] });
+    assert.doesNotThrow(() => autoplay(h, STRATEGIES[k].fn), k);
+    assert.equal(h.over, true);
+  }
+  assert.ok(legalize(g, { stock: 1.5, legs: [] }));
+});
+
+test("overall ranking uses Sharpe, drawdown and IRR together", () => {
+  const rows = rankStrategies([
+    { key: "riskless", results: { sharpe: -0.98, maxDrawdown: 0.006, irr: 0.037 } },
+    { key: "crash", results: { sharpe: -0.53, maxDrawdown: 0.84, irr: -0.25 } },
+    { key: "market", results: { sharpe: 0.54, maxDrawdown: 0.245, irr: 0.122 } },
+  ]);
+  assert.deepEqual(rows.map((r) => r.key), ["market", "riskless", "crash"]);
+  assert.deepEqual(rows[1].ranks, { sharpe: 3, maxDrawdown: 1, irr: 2 });
 });

@@ -45,28 +45,46 @@ export function intrinsic(type, S, K) {
 
 export const IV_PARAMS = {
   window: 63,        // trading days of realized vol
-  minFracOfRv: 0.75, // implied never below 75% of the stock's own realized vol
+  atmToVix: 0.88,    // at-the-money index vol ≈ 0.88 × VIX (the VIX is a variance-swap level that includes skew)
+  minFracOfRv: 0.75, // at-the-money vol never below 75% of the stock's own realized vol
   floor: 0.08,       // never price below 8% vol
   cap: 2.5,          // or above 250%
+  skewStock: 1.25,   // smile slope for single stocks (per unit of log-moneyness)
+  skewIndex: 3.0,    // index options carry a much steeper put skew
 };
 
+/** Instruments priced with index-style skew. */
+export const INDEX_SYMBOLS = new Set(["SPY", "QQQ", "IWM", "DIA"]);
+
 /**
- * Implied vol used to price options on the game stock on a given day:
+ * At-the-money implied vol for the game stock on a given day:
  *
- *   IV^2 = RV63(stock)^2 + [ (VIX/100)^2 - RV63(SPY)^2 ]
+ *   IV_atm^2 = RV63(stock)^2 + [ (0.88 × VIX/100)^2 - RV63(SPY)^2 ]
  *
- * The bracket is the market's own variance risk premium that day: what option buyers
- * pay for S&P 500 volatility over what the index has actually been realizing. It is
- * added once, in variance units, to the stock's realized variance. So index options
- * (SPY) are priced exactly at the VIX, low-vol stocks carry a noticeable premium, and
- * high-vol single stocks carry a small one, which matches the empirical finding that
- * the volatility risk premium is concentrated in index options.
+ * The bracket is the market's own variance risk premium that day, measured at the money:
+ * what option buyers pay for S&P 500 volatility over what the index has actually been
+ * realizing. It is added once, in variance units, to the stock's realized variance. So
+ * at-the-money SPY options are priced at 0.88 × VIX, and high-vol single stocks carry only
+ * a small premium over realized vol, which matches the empirical finding that the
+ * volatility risk premium is concentrated in index options.
  */
 export function impliedVol(rvStock, rvSpy, vixLevel, p = IV_PARAMS) {
-  const v2 = rvStock * rvStock + (vixLevel / 100) ** 2 - rvSpy * rvSpy;
+  const atmIdx = (p.atmToVix * vixLevel) / 100;
+  const v2 = rvStock * rvStock + atmIdx * atmIdx - rvSpy * rvSpy;
   const lo = p.minFracOfRv * rvStock;
   const iv = Math.sqrt(Math.max(v2, lo * lo));
   return Math.min(p.cap, Math.max(p.floor, iv));
+}
+
+/**
+ * Volatility smile: IV(K) = IV_atm × (1 − skew × ln(K/S)), clipped to [0.5, 2] × IV_atm.
+ * Out-of-the-money puts (K < S) are priced richer and out-of-the-money calls cheaper,
+ * as in real equity option markets.
+ */
+export function smileVol(atm, moneyness, skew, p = IV_PARAMS) {
+  const v = atm * (1 - skew * Math.log(moneyness));
+  const clipped = Math.min(2 * atm, Math.max(0.5 * atm, v));
+  return Math.min(p.cap, Math.max(p.floor, clipped));
 }
 
 export const SPREAD = {
