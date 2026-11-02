@@ -353,7 +353,7 @@ def pipeline_drawing(width):
         ("GitHub Actions", "every weekday\nafter the close"),
         ("fetch_data.py", "yfinance → Yahoo\n→ Nasdaq; validate"),
         ("site/data/*.json", "commit only\nif data changed"),
-        ("GitHub Pages", "window ends at\nthe latest close"),
+        ("Vercel (live site)", "redeploys on every\ncommit"),
     ]
     n_ = len(boxes)
     gap = 14

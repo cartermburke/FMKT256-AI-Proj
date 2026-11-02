@@ -1,6 +1,6 @@
 # Blind Tape: a five-year stock & options trading challenge
 
-**Play it:** https://cartermburke.github.io/FMKT256-AI-Proj/ (no login, works on desktop and phone)
+**Play it:** https://fmkt256-ai-proj.vercel.app/ (no login, works on desktop and phone)
 
 FMKT 256 (Duke, Fall 2026) AI extra-credit project: prompt 1, a finance app (trading game).
 Built with Claude (Anthropic) as the AI pair-programmer. Academic exercise, not investment advice.
@@ -25,7 +25,7 @@ config/tickers.json ──► GitHub Actions: update-data (weekdays 22:30 UTC, o
                                yfinance → Yahoo chart API → Nasdaq API (→ FRED for T-bills, Tiingo if keyed)
                                validate: no gaps > 10 days, no NaN, ranges, split check, enough history
                                write site/data/prices/*.json + site/data/meta.json only if changed
-                          └─ commit "data: refresh prices through <date>" ─► deploy GitHub Pages
+                          └─ commit "data: refresh prices through <date>" ─► Vercel redeploys the site
 site/ (static) ──► loads data/*.json ──► the game window always ends at the latest close
 ```
 
@@ -43,7 +43,8 @@ site/ (static) ──► loads data/*.json ──► the game window always ends
 | `site/vendor/` | uPlot 1.6.32 (MIT), vendored so the site has no CDN dependency |
 | `site/data/` | Price data written by the workflow |
 | `scripts/fetch_data.py` | Downloader and validator |
-| `.github/workflows/` | `update-data.yml` (data + deploy), `pages.yml` (tests + deploy on code changes) |
+| `.github/workflows/` | `update-data.yml` (fetch, validate, commit data), `ci.yml` (unit tests on every push) |
+| `vercel.json` | Vercel serves `site/` as a static site and redeploys on every commit |
 | `tests/` | Unit tests, pandas cross-check, Playwright end-to-end test |
 | `submission/` | Script that builds the class submission PDF |
 

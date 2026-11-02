@@ -7,7 +7,8 @@ import { Game, RULES, normalizeAction, legalize } from "../site/engine/game.js";
 import { runBenchmarks } from "../site/engine/strategies.js";
 import { encodeReplay } from "../site/engine/replay.js";
 
-const SITE = process.env.SITE_URL || "https://cartermburke.github.io/FMKT256-AI-Proj/";
+const TEAM = JSON.parse(readFileSync(new URL("./team.json", import.meta.url)));
+const SITE = process.env.SITE_URL || TEAM.site_url;
 const DATA = new URL("../site/data/", import.meta.url);
 const load = (f) => JSON.parse(readFileSync(new URL(`prices/${f}.json`, DATA)));
 const meta = JSON.parse(readFileSync(new URL("meta.json", DATA)));

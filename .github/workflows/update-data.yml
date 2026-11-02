@@ -13,10 +13,10 @@ on:
       - "scripts/fetch_data.py"
       - ".github/workflows/update-data.yml"
 
+# Vercel deploys every commit on this branch, so committing new data is all it takes
+# for the live site to update.
 permissions:
   contents: write
-  pages: write
-  id-token: write
 
 concurrency:
   group: update-data
@@ -51,25 +51,3 @@ jobs:
             git pull --rebase origin "${GITHUB_REF_NAME}"
             git push origin "HEAD:${GITHUB_REF_NAME}"
           fi
-
-  # Pushes made with GITHUB_TOKEN don't trigger other workflows, so this job
-  # redeploys the site itself after a data refresh.
-  deploy:
-    needs: fetch
-    runs-on: ubuntu-latest
-    concurrency:
-      group: pages-deploy
-      cancel-in-progress: false
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ github.ref_name }}
-      - uses: actions/configure-pages@v5
-      - uses: actions/upload-pages-artifact@v3
-        with:
-          path: site
-      - id: deployment
-        uses: actions/deploy-pages@v4
