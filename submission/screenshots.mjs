@@ -25,7 +25,8 @@ try {
   await page.waitForSelector("#homeData strong");
   await page.screenshot({ path: OUT + "home.png" });
 
-  // A blind full game, a few turns in, with a covered call on the ticket.
+  // A blind full game, a few turns in, with a covered call on the ticket (a wider frame so it reads larger in the PDF).
+  await page.setViewportSize({ width: 1280, height: 880 });
   await page.click("#startFull");
   await page.waitForSelector("#priceChart canvas");
   for (let i = 0; i < 8; i++) {
@@ -38,6 +39,7 @@ try {
   await page.evaluate(() => window.scrollTo(0, 0));
   await page.mouse.move(420, 300);
   await page.screenshot({ path: OUT + "game.png", fullPage: false });
+  await page.setViewportSize({ width: 1280, height: 1010 });
 
   // The demo replay's results.
   await page.goto(`${base}#/replay/${code}`);

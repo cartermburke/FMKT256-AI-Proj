@@ -223,14 +223,13 @@ story.append(PageBreak())
 # ----------------------------------------------------------------------------- page 2
 
 story += [P("Playing a month", "h1"),
-          P("The bar across the top leads with the account's value and return, then the month and the net exposure. "
-            "The price chart shows up to a year before the start plus every month played so far, with the 200-day "
-            "average and a marker wherever the player traded; below it, the account's daily value runs next to simply "
-            "holding the stock. The order ticket on the right sets the stock position and lists live option quotes at "
-            "five strikes: tap a bid to sell or an ask to buy. Every order is checked before it can be submitted, the "
-            "ticket shows each position before and after the order, and the bar at the bottom names the action "
-            "(\u201cHold, go to month 10\u201d or \u201cTrade and go to month 10\u201d) and sums up the month just played."),
-          framed(img(SUB / "img" / "game.png", W - 8, max_h=4.15 * inch)), Spacer(1, 6),
+          P("The top bar leads with the account's value and return, then the month and net exposure. The price chart "
+            "shows up to a year before the start and every month played, with the 200-day average and a marker wherever "
+            "the player traded; the account's daily value runs below it, next to simply holding the stock. On the ticket, "
+            "set the stock position, then tap a bid to sell or an ask to buy options at five strikes. Every order is "
+            "checked first, the ticket shows each position before and after, and the bottom bar names the action "
+            "(\u201cHold, go to month 10\u201d) and sums up the month just played."),
+          framed(img(SUB / "img" / "game.png", W - 8, max_h=3.6 * inch)), Spacer(1, 6),
           P("Rules", "h2")]
 story += bullets([
     "<b>Turns:</b> 21 trading days each; 60 turns for the full challenge, or a random 12-month slice in a quick round.",
@@ -268,7 +267,7 @@ story += [P("The scorecard and the debrief", "h1"),
             "the account's cash flows. With a fixed stake that is the compound annual growth rate, and the engine "
             "computes a general XIRR so contributions could be added. A wiped-out account has no meaningful Sharpe "
             "and ranks last. A rule-based coach then explains the result: market timing (net of option delta), "
-            "shorts, options P&amp;L by what was bought or written, frictions, and the overall placing."),
+            "shorts, options P&amp;L by what was bought or written, and frictions; its note on the overall placing sits beside the verdict at the top of the results."),
           framed(img(SUB / "img" / "coach.png", W - 8, max_h=2.7 * inch))]
 story.append(PageBreak())
 
