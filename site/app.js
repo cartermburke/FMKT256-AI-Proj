@@ -47,7 +47,6 @@ init().catch((e) => fatal(e));
 async function init() {
   initTheme();
   wireStatic();
-  window.addEventListener("hashchange", route);
   try {
     S.meta = await loadMeta();
   } catch (e) {
@@ -56,6 +55,10 @@ async function init() {
   }
   renderHomeMeta();
   renderDataPage();
+  // Routes start only once the data index is in; a link clicked while loading is still
+  // honored, because route() reads the hash when it runs.
+  window.addEventListener("hashchange", route);
+  window.addEventListener("storage", onStorage);
   route();
 }
 
@@ -78,20 +81,34 @@ function load(key) {
   try { return localStorage.getItem(key); } catch { return null; }
 }
 
+// Each tab tags what it saves, so a tab can tell when another one has replaced the game.
+const TAB = Math.random().toString(36).slice(2, 10);
+
 /** Keep the current game in this browser so a reload picks it back up. */
 function saveGame() {
-  if (!S.game || S.replay || !S.cfg) return;
-  store(SAVE_KEY, JSON.stringify({ code: encodeReplay(S.cfg, S.actions), challenge: S.challengeCode || null }));
+  if (!S.game || S.replay || !S.cfg || S.saveStale) return;
+  store(SAVE_KEY, JSON.stringify({ code: encodeReplay(S.cfg, S.actions), challenge: S.challengeCode || null, tab: TAB }));
 }
 
 async function restoreSave() {
   const raw = load(SAVE_KEY);
   if (!raw) return false;
+  const drop = () => { store(SAVE_KEY, null); S.game = null; return false; };
+  let code, challenge, cfg, actions;
   try {
-    const { code, challenge } = JSON.parse(raw);
-    const { cfg, actions } = decodeReplay(code);
+    ({ code, challenge } = JSON.parse(raw));
+    ({ cfg, actions } = decodeReplay(code));
     validateReplayCfg(cfg, actions);
+  } catch {
+    return drop(); // the saved game itself is unreadable: drop it quietly and start fresh
+  }
+  try {
     await setupGame(cfg);
+  } catch {
+    S.game = null; // the price data didn't load: keep the save for the next visit
+    return false;
+  }
+  try {
     if (challenge) await attachChallenger(challenge);
     for (const a of actions) {
       if (S.game.over) break;
@@ -99,14 +116,42 @@ async function restoreSave() {
       S.game.play(a);
       S.actions.push(normalizeAction(a));
     }
-    if (S.game.over) S.benchmarks = runBenchmarks(S.market, { startIdx: S.game.startIdx, turns: S.game.turns }, S.spyMarket);
-    return true;
   } catch {
-    // Anything wrong with the saved game: drop it quietly and start fresh.
-    store(SAVE_KEY, null);
-    S.game = null;
-    return false;
+    return drop();
   }
+  if (S.game.over) S.benchmarks = runBenchmarks(S.market, { startIdx: S.game.startIdx, turns: S.game.turns }, S.spyMarket);
+  ownSave();
+  return true;
+}
+
+/** This tab now holds the game in storage (it started or reloaded it): saving resumes. */
+function ownSave() {
+  S.saveStale = false;
+  $("tabNote").hidden = true;
+}
+
+/** Another tab saved a game. On the home screen, pick it up; mid-game, say so and stop saving here. */
+function onStorage(e) {
+  if (e.key !== SAVE_KEY || !e.newValue) return;
+  let from = null;
+  try { from = JSON.parse(e.newValue).tab; } catch { /* unreadable: treat as another tab */ }
+  if (from === TAB) return;
+  // Queued behind any route in progress, so the two never load a game at the same time.
+  routeChain = routeChain.then(() => otherTabSaved()).catch((err) => fatal(err));
+}
+
+async function otherTabSaved() {
+  if (!$("screen-home").hidden && !S.replay) {
+    S.game = null;
+    await restoreSave();
+    renderResume();
+    return;
+  }
+  if (S.replay) return;
+  S.saveStale = true;
+  const n = $("tabNote");
+  n.hidden = false;
+  n.textContent = "This game was changed in another tab, so this tab has stopped saving it. Reload to pick up the latest game.";
 }
 
 // ------------------------------------------------------------------ theme
@@ -141,6 +186,8 @@ function initTheme() {
 // ------------------------------------------------------------------ routing
 
 function show(screen) {
+  const prev = S.screen;
+  S.screen = screen;
   for (const el of document.querySelectorAll(".screen")) el.hidden = el.id !== `screen-${screen}`;
   for (const a of document.querySelectorAll(".nav a")) {
     const n = a.dataset.nav;
@@ -149,24 +196,51 @@ function show(screen) {
     if (on) a.setAttribute("aria-current", "page"); else a.removeAttribute("aria-current");
   }
   window.scrollTo(0, 0);
+  // On a change of screen (not the first load, so Tab still starts at the skip link), move
+  // focus to the new screen: its heading, or the page itself on the game screen, where
+  // Enter then plays the month.
+  if (prev && prev !== screen) {
+    const t = screen === "game" ? $("app") : document.querySelector(`#screen-${screen} h1`);
+    if (t) {
+      if (!t.hasAttribute("tabindex")) t.setAttribute("tabindex", "-1");
+      t.focus({ preventScroll: true });
+    }
+  }
 }
 
-async function route() {
+// Routes run one at a time: a hashchange that arrives while a game is loading waits for it,
+// so a saved game is never restored twice.
+let routeSeq = 0;
+let routeChain = Promise.resolve();
+function route() {
+  const seq = ++routeSeq;
+  routeChain = routeChain.then(() => routeNow(seq)).catch((e) => fatal(e));
+  return routeChain;
+}
+
+async function routeNow(seq) {
+  if (!S.meta) return;
   const h = location.hash || "#/";
   if (h.startsWith("#/replay/")) {
-    await openReplay(h.slice("#/replay/".length));
+    await openReplay(h.slice("#/replay/".length), seq);
     return;
   }
   if (h.startsWith("#/challenge/")) {
-    await openChallenge(h.slice("#/challenge/".length));
+    await openChallenge(h.slice("#/challenge/".length), seq);
     return;
   }
   // Leaving a replay drops it, so the game in progress (kept in storage) comes back.
   if (S.replay) { S.game = null; S.replay = false; }
   if (!S.game) await restoreSave();
+  if (seq !== routeSeq) return; // a newer route is queued; it picks the screen
   if (h === "#/play" && S.game && !S.game.over) { show("game"); renderGame(true); return; }
-  if (h === "#/play" && S.game && S.game.over) { location.hash = "#/results"; return; }
-  if (h === "#/results" && S.game && S.game.over) { show("results"); renderResults(); return; }
+  if ((h === "#/play" || h === "#/results") && S.game && S.game.over) {
+    // Replace rather than push, so Back from the results leaves them.
+    if (h !== "#/results") history.replaceState(null, "", "#/results");
+    show("results");
+    renderResults();
+    return;
+  }
   if (h === "#/how") { show("how"); return; }
   if (h === "#/data") { show("data"); return; }
   show("home");
@@ -230,14 +304,35 @@ function wireStatic() {
     if (!$("nextTurn").disabled) { e.preventDefault(); nextTurn(); }
   });
   // Reveal: any click or key during the ceremony skips to the end.
-  $("revealSkip").addEventListener("click", endCeremony);
-  $("revealBlock").addEventListener("click", () => { if (S.ceremonyOn) endCeremony(); });
-  document.addEventListener("keydown", (e) => { if (S.ceremonyOn && (e.key === "Escape" || e.key === " ")) endCeremony(); });
-  // How it works: contents links scroll within the page (the hash is used for routing).
+  const skipReveal = () => {
+    const viaSkip = document.activeElement === $("revealSkip");
+    endCeremony();
+    // The Skip button hides itself, so keep keyboard focus on the results.
+    if (viaSkip) $("revealTitle").focus({ preventScroll: true });
+  };
+  $("revealSkip").addEventListener("click", skipReveal);
+  $("revealBlock").addEventListener("click", (e) => { if (S.ceremonyOn && e.target !== $("revealSkip")) endCeremony(); });
+  document.addEventListener("keydown", (e) => {
+    if (!S.ceremonyOn || (e.key !== "Escape" && e.key !== " ")) return;
+    if (e.key === " " && e.target.closest?.("input, textarea, select, [contenteditable]")) return;
+    if (e.key === " ") e.preventDefault(); // Space skips; it shouldn't also page down
+    skipReveal();
+  });
+  // The skip link moves focus to the content without changing the route.
+  document.querySelector(".skip-link").addEventListener("click", (e) => {
+    e.preventDefault();
+    $("app").focus();
+  });
+  // How it works: contents links scroll within the page (the hash is used for routing) and
+  // take focus with them, so reading and Tab continue from the section.
   for (const a of document.querySelectorAll("[data-jump]")) {
     a.addEventListener("click", (e) => {
       e.preventDefault();
-      $(a.dataset.jump)?.scrollIntoView({ behavior: reducedMotion() ? "auto" : "smooth", block: "start" });
+      const t = $(a.dataset.jump);
+      if (!t) return;
+      if (!t.hasAttribute("tabindex")) t.setAttribute("tabindex", "-1");
+      t.scrollIntoView({ behavior: reducedMotion() ? "auto" : "smooth", block: "start" });
+      t.focus({ preventScroll: true });
     });
   }
 }
@@ -287,6 +382,7 @@ async function newGame(mode, opts = {}) {
     return;
   }
   S.replay = false;
+  ownSave();
   saveGame();
   if (location.hash === "#/play") { show("game"); renderGame(true); }
   else location.hash = "#/play";
@@ -322,7 +418,12 @@ async function setupGame(cfg) {
   for (const k of Object.keys(S.charts)) { S.charts[k].destroy(); delete S.charts[k]; }
   document.querySelector(".autopilot").open = false;
   $("errors").dataset.last = "";
+  $("errors").dataset.text = "";
   $("errors").innerHTML = "";
+  $("errorAlert").textContent = "";
+  $("turnToast").dataset.last = "";
+  $("turnToast").innerHTML = "";
+  $("orderStatus").textContent = "";
   resetCeremony();
 }
 
@@ -336,8 +437,14 @@ function monthLabelFor(x) {
   const g = S.game;
   const idx = Math.round(g.startIdx + x * TD);
   if (!S.cfg.blind && S.market.dates[idx]) return fmtDate(S.market.dates[idx]);
+  return monthsWords(x);
+}
+
+/** Blind-mode time in words: "Start", "2.5 months in", "3.0 months before the start". */
+function monthsWords(x) {
   const m = Math.round(x * 10) / 10;
-  return m <= 0 ? `${Math.abs(m).toFixed(1)} months before the start` : `Month ${m.toFixed(1)}`;
+  if (Math.abs(m) < 0.05) return "Start";
+  return m < 0 ? `${(-m).toFixed(1)} months before the start` : `${m.toFixed(1)} months in`;
 }
 
 function setChange(el, x, fmt) {
@@ -367,9 +474,13 @@ function renderGame(fresh = false) {
   if (S.challenger) {
     h2h.textContent = `Head-to-head: ${S.challenger.name} played this exact tape. Their score stays hidden until you finish, then you're ranked side by side.`;
   }
+  // The month summary is written once per month, so coming back to the screen doesn't repeat it.
   const toast = $("turnToast");
   toast.hidden = !S.lastToast;
-  toast.innerHTML = S.lastToast;
+  if (toast.dataset.last !== S.lastToast) {
+    toast.dataset.last = S.lastToast;
+    toast.innerHTML = S.lastToast;
+  }
 
   if (S.cfg.blind) {
     $("priceTitle").textContent = "Mystery stock";
@@ -379,6 +490,7 @@ function renderGame(fresh = false) {
     $("priceTitle").textContent = `${p ? p.name : S.cfg.sym} (${S.cfg.sym})`;
     $("priceSub").textContent = `Adjusted price in dollars · ${fmtDate(S.market.dates[g.idx])} · gray line: 200-day average`;
   }
+  $("accountSub").textContent = `Daily value of your account next to simply holding the stock${S.cfg.blind ? " · axis: months from the start" : ""}`;
 
   // Price history: up to one year before the start, through today, with the player's trades marked.
   const from = Math.max(0, g.startIdx - 252);
@@ -405,7 +517,7 @@ function renderGame(fresh = false) {
   const extra = { marks, vlines: [{ x: 0, label: "Start" }] };
   if (!S.charts.price) {
     S.charts.price = makeChart({
-      el: $("priceChart"), height: () => (isPhone() ? 190 : 260), xFmt, xSpace: S.cfg.blind ? 40 : 76, yFmt: priceFmt, xLabel: "When", xLabelFmt: monthLabelFor, xIncrs: [1, 2, 3, 6, 12, 24],
+      el: $("priceChart"), height: () => (isPhone() ? 190 : 260), xFmt, xSpace: S.cfg.blind ? 40 : 76, rightPad: S.cfg.blind ? 22 : 32, yFmt: priceFmt, xLabel: "When", xLabelFmt: monthLabelFor, xIncrs: [1, 2, 3, 6, 12, 24],
       series: [
         { label: "Price", colorVar: "--ink", width: 1.75, fmt: priceFmt },
         { label: "200-day average", colorVar: "--ref", width: 1.25, fmt: priceFmt },
@@ -433,7 +545,7 @@ function renderGame(fresh = false) {
     const mFmt = (v) => money(v, { compact: true });
     if (!S.charts.equity) {
       S.charts.equity = makeChart({
-        el: $("equityChart"), height: () => (isPhone() ? 170 : 200), xSpace: S.cfg.blind ? 40 : 76, xFmt: (v) => (S.cfg.blind ? `${v}` : xFmt(v)), yFmt: mFmt, xLabel: "When", xLabelFmt: monthLabelFor, xIncrs: [1, 2, 3, 6, 12, 24],
+        el: $("equityChart"), height: () => (isPhone() ? 170 : 200), xSpace: S.cfg.blind ? 40 : 76, rightPad: S.cfg.blind ? 22 : 32, xFmt, yFmt: mFmt, xLabel: "When", xLabelFmt: monthLabelFor, xIncrs: [1, 2, 3, 6, 12, 24],
         xRange: () => [0, Math.max(1, S.game.turn)],
         series: [
           { label: "You", colorVar: "--you", width: 2.25, fmt: (v) => money(v) },
@@ -446,14 +558,16 @@ function renderGame(fresh = false) {
     }
   }
 
-  if (fresh || S.stockTarget === null) syncSlider();
+  syncSlider();
   renderQuotes();
   updateTicket();
   if (fresh) teachOnce();
 }
 
+/** Put the slider on the pending target, or on the current position when there is none. */
 function syncSlider() {
-  const cur = Math.max(-100, Math.min(150, Math.round((S.game.exposure() * 100) / 5) * 5));
+  const x = S.stockTarget ?? S.game.exposure();
+  const cur = Math.max(-100, Math.min(150, Math.round((x * 100) / 5) * 5));
   $("stockSlider").value = String(cur);
   paintSlider();
 }
@@ -508,7 +622,7 @@ function renderQuotes() {
         b.dataset.side = side;
         b.dataset.type = type;
         b.textContent = f(side === "W" ? row[type].bid : row[type].ask);
-        b.title = `${side === "B" ? "Buy" : "Write (sell)"} the ${row.strike}% ${type === "C" ? "call" : "put"} at ${b.textContent}`;
+        b.title = `${side === "B" ? "Buy" : "Write (sell)"} the ${row.strike}% ${type === "C" ? "call" : "put"} at ${b.textContent}${itm ? ", in the money" : ""}`;
         b.setAttribute("aria-label", b.title);
         const say = `${side === "B" ? "Buy" : "Sell"} ${row.strike} ${type === "C" ? "call" : "put"} · ${S.cfg.blind ? "" : "$"}${b.textContent}${itm ? " · in the money" : ""}`;
         b.addEventListener("mouseenter", () => { peek.textContent = say; });
@@ -534,6 +648,26 @@ function addLeg(side, type, strike, notional) {
   S.legNote = "";
   S.legs.push({ side, type, strike, notional });
   updateTicket();
+  const l = S.legs[S.legs.length - 1];
+  const n = S.legs.length;
+  announce(`Added: ${legWords(l)}${legPremium(l)}. ${n} option${n === 1 ? "" : "s"} in this order.`);
+}
+
+const legWords = (l) => `${l.side === "B" ? "Buy" : "Write"} ${l.strike}%-strike ${l.type === "C" ? "calls" : "puts"}, size ${pct(l.notional, 0)} of equity`;
+
+/** ", pay $X" for a leg as priced in the current order preview (empty if it can't be priced). */
+function legPremium(l) {
+  const chk = S.game.check(currentAction());
+  const pl = chk.preview?.legs.find((x) => x.side === l.side && x.type === l.type && x.strike === l.strike && Math.abs(x.notional - l.notional) < 1e-9);
+  return pl ? `, ${l.side === "B" ? "pay" : "receive"} ${money(pl.n * pl.px)}` : "";
+}
+
+/** One polite status message for changes that otherwise happen silently (adding or removing an option). */
+function announce(msg) {
+  const el = $("orderStatus");
+  el.textContent = "";
+  // A fresh text node after a frame, so the same message twice in a row is still read.
+  requestAnimationFrame(() => { el.textContent = msg; });
 }
 
 function currentAction() {
@@ -552,7 +686,13 @@ function updateTicket() {
   if (!g) return;
   paintSlider();
   const out = $("stockOut");
-  out.textContent = S.stockTarget === null ? `Keep current (${pct(g.exposure(), 0)})` : `Target ${pct(S.stockTarget, 0)}`;
+  const outText = S.stockTarget === null ? `Keep current (${pct(g.exposure(), 0)})` : `Target ${pct(S.stockTarget, 0)}`;
+  if (out.textContent !== outText) out.textContent = outText;
+  // The slider speaks its own value in words; the output beside it is visual only.
+  const sv = Number($("stockSlider").value);
+  $("stockSlider").setAttribute("aria-valuetext", S.stockTarget === null
+    ? `Keep current, ${pct(g.exposure(), 0)} of equity`
+    : sv > 0 ? `Long ${sv}% of equity` : sv < 0 ? `Short ${-sv}% of equity` : "Flat, 0%");
   $("keepBtn").setAttribute("aria-pressed", String(S.stockTarget === null));
   for (const b of document.querySelectorAll(".quick-btns button[data-x]")) {
     b.setAttribute("aria-pressed", String(S.stockTarget !== null && Math.abs(Number(b.dataset.x) / 100 - S.stockTarget) < 1e-9));
@@ -565,7 +705,7 @@ function updateTicket() {
   list.innerHTML = "";
   S.legs.forEach((l, i) => {
     const li = document.createElement("li");
-    const what = `${l.side === "B" ? "Buy" : "Write"} ${l.strike}%-strike ${l.type === "C" ? "calls" : "puts"}, size ${pct(l.notional, 0)} of equity`;
+    const what = legWords(l);
     const pl = priced.find((x) => x.side === l.side && x.type === l.type && x.strike === l.strike && Math.abs(x.notional - l.notional) < 1e-9);
     const prem = pl ? `${l.side === "B" ? "pay" : "receive"} ${money(pl.n * pl.px)}` : "";
     const rm = document.createElement("button");
@@ -576,6 +716,8 @@ function updateTicket() {
       S.legs.splice(i, 1);
       S.legNote = "";
       updateTicket();
+      const n = S.legs.length;
+      announce(`Removed: ${what}. ${n ? `${n} option${n === 1 ? "" : "s"} left in this order.` : "No options in this order."}`);
       // The list was rebuilt, so put focus somewhere sensible instead of letting it fall to the page
       // (where Enter would advance the month).
       const left = $("legsList").querySelectorAll("li button");
@@ -609,17 +751,26 @@ function updateTicket() {
   }
   $("preview").innerHTML = rows.join("");
 
-  // Errors: rebuilt only when their text changes, so screen readers announce each once.
+  // Errors: the list always shows the current numbers, but the alert fires only when the kind
+  // of error changes, not on every slider step that moves a number in the same message.
   const errs = $("errors");
   const errText = [...chk.errors, ...(S.legNote ? [S.legNote] : [])];
-  const key = errText.join("|");
+  const shown = errText.join("|");
+  if (errs.dataset.text !== shown) {
+    errs.dataset.text = shown;
+    errs.innerHTML = errText.map((e) => `<li>${e}</li>`).join("");
+  }
+  const key = errText.map((e) => e.replace(/[−+-]?[$]?[\d.,]+%?/g, "#")).join("|");
   if (errs.dataset.last !== key) {
     errs.dataset.last = key;
-    errs.innerHTML = errText.map((e) => `<li>${e}</li>`).join("");
+    $("errorAlert").textContent = errText.join(" ");
   }
 
   const go = $("nextTurn");
-  go.disabled = !chk.ok || !!S.busy;
+  go.disabled = !chk.ok;
+  // During the short pause after a month the button is only marked busy, not disabled, so
+  // keyboard focus stays on it (a disabled button would drop focus to the page).
+  go.setAttribute("aria-disabled", String(!!S.busy));
   const last = g.turn + 1 >= g.turns;
   go.textContent = !chk.ok ? "Fix the order to continue"
     : last ? (S.cfg.blind ? (isHold() ? "Hold and reveal the stock" : "Trade and reveal the stock") : (isHold() ? "Hold and see results" : "Trade and see results"))
@@ -658,9 +809,10 @@ function nextTurn() {
 }
 
 function runAutopilot() {
+  const g = S.game;
+  if (!g || g.over) return; // a second click on a finished game does nothing
   const key = $("autoStrat").value;
   const fn = STRATEGIES[key].fn;
-  const g = S.game;
   const state = { first: true };
   try {
     while (!g.over) {
@@ -684,8 +836,10 @@ function finish() {
   S.benchmarks = runBenchmarks(S.market, { startIdx: g.startIdx, turns: g.turns }, S.spyMarket);
   // The reveal ceremony runs once, for a blind game finished in this tab.
   S.ceremony = !!S.cfg.blind && !S.replay && !reducedMotion();
-  if (location.hash === "#/results") { show("results"); renderResults(); }
-  else location.hash = "#/results";
+  // Replace the #/play entry rather than push one, so Back from the results leaves them.
+  if (location.hash !== "#/results") history.replaceState(null, "", "#/results");
+  show("results");
+  renderResults();
 }
 
 // ------------------------------------------------------------------ results
@@ -731,13 +885,31 @@ function verdictSentence(rows, res, bh) {
   const nets = g.log.map((t) => Math.abs(Number.isFinite(t.netExposure) ? t.netExposure : t.exposure));
   const avgExp = nets.length ? nets.reduce((a, b) => a + b, 0) / nets.length : 0;
   const moved = (x) => `${x >= 0 ? "rose" : "fell"} ${pct(Math.abs(x), 0)}`;
+  // The reason has to agree with the place: compare against buy and hold's place first.
+  const bhRow = rows.find((r) => r.key === "buyHold");
+  const ahead = bhRow && you.overall < bhRow.overall;
+  const behind = bhRow && you.overall > bhRow.overall;
+  const rY = pct(res.totalReturn, 0, true);
+  const rB = pct(bh.totalReturn, 0, true);
+  // Only the measures that point the same way as the place are quoted as the reason.
+  const sharpeTxt = `Sharpe ${num(res.sharpe)} against ${num(bh.sharpe)}`;
+  const dropTxt = `worst drop ${pct(res.maxDrawdown, 0)} against ${pct(bh.maxDrawdown, 0)}`;
+  const which = (better) => {
+    const out = [];
+    if (better ? res.sharpe > bh.sharpe : res.sharpe < bh.sharpe) out.push(sharpeTxt);
+    if (better ? res.maxDrawdown < bh.maxDrawdown - 0.005 : res.maxDrawdown > bh.maxDrawdown + 0.005) out.push(dropTxt);
+    return out.length ? ` (${out.join(", ")})` : "";
+  };
   let why;
   if (res.busted) why = "your account was wiped out before the end.";
-  else if (Math.abs(res.totalReturn - bh.totalReturn) < 0.005 && Math.abs(res.maxDrawdown - bh.maxDrawdown) < 0.01) why = `you tracked simply holding the stock almost exactly, ${pct(res.totalReturn, 0, true)} each.`;
+  else if (Math.abs(res.totalReturn - bh.totalReturn) < 0.005 && Math.abs(res.maxDrawdown - bh.maxDrawdown) < 0.01) why = `you tracked simply holding the stock almost exactly, ${rY} each.`;
   else if (avgExp < 0.15) why = `you held mostly cash while the stock ${moved(bh.totalReturn)}.`;
-  else if (res.totalReturn > bh.totalReturn + 0.005) why = `you beat simply holding the stock, ${pct(res.totalReturn, 0, true)} against ${pct(bh.totalReturn, 0, true)}.`;
-  else if (res.maxDrawdown < bh.maxDrawdown - 0.02) why = `you returned ${pct(res.totalReturn, 0, true)} against ${pct(bh.totalReturn, 0, true)} for holding, with a smaller worst drop (${pct(res.maxDrawdown, 0)} against ${pct(bh.maxDrawdown, 0)}).`;
-  else why = `simply holding the stock did better, ${pct(bh.totalReturn, 0, true)} against your ${pct(res.totalReturn, 0, true)}.`;
+  else if (ahead && res.totalReturn > bh.totalReturn + 0.005) why = `you beat simply holding the stock, ${rY} against ${rB}.`;
+  else if (ahead && res.maxDrawdown < bh.maxDrawdown - 0.02) why = `you returned ${rY} against ${rB} for holding, with a smaller worst drop (${pct(res.maxDrawdown, 0)} against ${pct(bh.maxDrawdown, 0)}).`;
+  else if (ahead) why = `you returned ${rY} against ${rB} for holding and placed ahead of it on the judged metrics${which(true)}.`;
+  else if (behind && res.totalReturn > bh.totalReturn + 0.005) why = `you returned ${rY} against ${rB} for holding, but placed below it on the judged metrics${which(false)}.`;
+  else if (behind) why = `simply holding the stock did better, ${rB} against your ${rY}.`;
+  else why = `you placed level with simply holding the stock, ${rY} against ${rB}.`;
   return `${place}: ${why}`;
 }
 
@@ -819,7 +991,7 @@ function renderResults() {
       return d ? fmtMonthYear(d) : "";
     },
     yFmt: (v) => `$${v.toFixed(Math.max(...rp) >= 20 ? 0 : 2)}`, xLabel: "When",
-    xLabelFmt: (v) => { const d = S.market.dates[Math.round(g.startIdx + v * TD)]; return S.revealDates && d ? fmtDate(d) : `Month ${v.toFixed(1)}`; },
+    xLabelFmt: (v) => { const d = S.market.dates[Math.round(g.startIdx + v * TD)]; return S.revealDates && d ? fmtDate(d) : monthsWords(v); },
     series: [{ label: `${cfg.sym} price`, colorVar: "--ink", width: 1.75, fmt: (v) => `$${v.toFixed(2)}` }],
     data: [rx, rp],
   });
@@ -872,7 +1044,7 @@ function renderResults() {
     S.charts.resExp = makeChart({
       el: $("resExpChart"), height: () => (isPhone() ? 190 : 220), yFmt: (v) => pct(v, 0), xFmt: (v) => `${v}`, zeroLine: true, xIncrs: [1, 2, 3, 6, 12],
       xRange: () => [0.5, g.log.length + 0.5],
-      xLabel: "Month", xLabelFmt: (v) => `Month ${v}`,
+      xLabel: "Month", xLabelFmt: (v) => `${v} of ${g.log.length}`,
       yRange: (u, min, max) => [Math.min(-0.25, (min ?? 0) * 1.1), Math.max(0.25, (max ?? 0) * 1.1)],
       series: [
         { label: "Long", colorVar: "--long", bars: true, fmt: (v) => pct(v, 0) },
@@ -970,7 +1142,7 @@ async function attachChallenger(code) {
   S.challengeCode = code;
 }
 
-async function openChallenge(code) {
+async function openChallenge(code, seq = routeSeq) {
   const saved = { cfg: S.cfg, market: S.market, spyMarket: S.spyMarket, game: S.game, actions: S.actions, benchmarks: S.benchmarks, replay: S.replay, challenger: S.challenger, challengeCode: S.challengeCode };
   try {
     const { cfg, actions } = decodeReplay(code);
@@ -978,7 +1150,9 @@ async function openChallenge(code) {
     await setupGame({ ...cfg, by: undefined });
     await attachChallenger(code);
     S.replay = false;
+    ownSave();
     saveGame();
+    if (seq !== routeSeq) return; // the player has already moved on; the challenge is kept for Resume
     history.replaceState(null, "", "#/play");
     show("game");
     renderGame(true);
@@ -986,6 +1160,7 @@ async function openChallenge(code) {
     Object.assign(S, saved);
     for (const k of Object.keys(S.charts)) { S.charts[k].destroy(); delete S.charts[k]; }
     fatal(e, { quiet: true });
+    if (seq !== routeSeq) return;
     show("home");
     renderResume();
   }
@@ -996,7 +1171,7 @@ function replayUrl() {
   return `${location.origin}${location.pathname}#/replay/${code}`;
 }
 
-async function openReplay(code) {
+async function openReplay(code, seq = routeSeq) {
   // Snapshot the current game so a broken replay link can't replace a game in progress.
   const saved = { cfg: S.cfg, market: S.market, spyMarket: S.spyMarket, game: S.game, actions: S.actions, benchmarks: S.benchmarks, replay: S.replay, challenger: S.challenger, challengeCode: S.challengeCode };
   try {
@@ -1012,12 +1187,14 @@ async function openReplay(code) {
     if (!S.game.over) throw new Error("This replay link is incomplete.");
     S.replay = true;
     S.benchmarks = runBenchmarks(S.market, { startIdx: S.game.startIdx, turns: S.game.turns }, S.spyMarket);
+    if (seq !== routeSeq) return;
     show("results");
     renderResults();
   } catch (e) {
     Object.assign(S, saved);
     for (const k of Object.keys(S.charts)) { S.charts[k].destroy(); delete S.charts[k]; }
     fatal(e, { quiet: true });
+    if (seq !== routeSeq) return;
     show("home");
     renderResume();
   }

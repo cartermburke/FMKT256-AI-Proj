@@ -228,7 +228,7 @@ story += [P("Playing a month", "h1"),
             "the player traded; the account's daily value runs below it, next to simply holding the stock. On the ticket, "
             "set the stock position, then tap a bid to sell or an ask to buy options at five strikes. Every order is "
             "checked first, the ticket shows each position before and after, and the bottom bar names the action "
-            "(\u201cHold, go to month 10\u201d) and sums up the month just played."),
+            "(\u201cTrade and go to month 10\u201d) and sums up the month just played."),
           framed(img(SUB / "img" / "game.png", W - 8, max_h=3.6 * inch)), Spacer(1, 6),
           P("Rules", "h2")]
 story += bullets([

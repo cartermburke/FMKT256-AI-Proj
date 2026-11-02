@@ -79,4 +79,4 @@ node tests/e2e.mjs                                # Playwright: plays games thro
   - Debit pays T-bill + 1.5%.
   - Shorts pay 0.5% a year to borrow.
   - Maintenance margin is 25%, checked at every daily close.
-- **Limitations:** model option prices (no skew), monthly decisions at the close, fractional shares. See *How it works*.
+- **Limitations:** model option prices (a simple two-parameter smile, not fitted to each stock; earnings days aren't modelled), monthly decisions at the close, fractional shares. See *How it works*.

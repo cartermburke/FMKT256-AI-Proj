@@ -103,10 +103,45 @@ function drawEndLabels(u, spec) {
     labels.push({ text: s.endLabel, y, color: colorOf(s), strong: !!s.strong });
   });
   labels.sort((a, b) => a.y - b.y);
+  // Labels that would overlap form a group, centered on the average end point of its lines and
+  // kept inside the plot; groups merge until none overlap.
   const gap = 14 * pr;
-  for (let i = 1; i < labels.length; i++) if (labels[i].y - labels[i - 1].y < gap) labels[i].y = labels[i - 1].y + gap;
-  const x = u.bbox.left + u.bbox.width + 6 * pr;
+  const top = u.bbox.top + 6 * pr;
+  const bottom = u.bbox.top + u.bbox.height - 6 * pr;
+  const startOf = (g) => {
+    const span = (g.items.length - 1) * gap;
+    const mean = g.items.reduce((s, l) => s + l.target, 0) / g.items.length;
+    return Math.max(top, Math.min(bottom - span, mean - span / 2));
+  };
+  const groups = [];
+  for (const l of labels) {
+    l.target = l.y;
+    groups.push({ items: [l] });
+    while (groups.length > 1) {
+      const g = groups[groups.length - 1];
+      const p = groups[groups.length - 2];
+      if (startOf(p) + p.items.length * gap <= startOf(g)) break;
+      p.items.push(...g.items);
+      groups.pop();
+    }
+  }
+  for (const g of groups) {
+    const s0 = startOf(g);
+    g.items.forEach((l, i) => { l.y = s0 + i * gap; });
+  }
+  const right = u.bbox.left + u.bbox.width;
+  const x = right + 7 * pr;
   ctx.save();
+  // A short leader from the line's end to its label whenever the label had to move.
+  ctx.lineWidth = 1 * pr;
+  for (const l of labels) {
+    if (Math.abs(l.y - l.target) <= 2 * pr) continue;
+    ctx.strokeStyle = l.color;
+    ctx.beginPath();
+    ctx.moveTo(right + 1 * pr, l.target);
+    ctx.lineTo(right + 5 * pr, l.y);
+    ctx.stroke();
+  }
   ctx.textBaseline = "middle";
   ctx.textAlign = "left";
   for (const l of labels) {

@@ -74,7 +74,7 @@ try {
   await page.selectOption("#legSide", "W");
   await page.selectOption("#legType", "C");
   await page.click("#addLeg");
-  check(!(await page.isEnabled("#nextTurn")), "naked call write is rejected");
+  check((await page.textContent("#nextTurn")) === "Fix the order to continue" && !(await page.isEnabled("#nextTurn")), "naked call write is rejected");
   check((await page.textContent("#errors")).includes("covered"), "error explains the covered-call rule");
   await page.locator("#legsList li button").first().click();
   // Short 50% and buy a protective 105 call.
@@ -177,7 +177,7 @@ try {
   await page.selectOption("#legSize", "2");
   await page.click("#addLeg");
   await page.click('.quick-btns button[data-x="100"]');
-  check(!(await page.isEnabled("#nextTurn")), "stock 100% + deep ITM calls on 200% is rejected");
+  check((await page.textContent("#nextTurn")) === "Fix the order to continue" && !(await page.isEnabled("#nextTurn")), "stock 100% + deep ITM calls on 200% is rejected");
   check((await page.textContent("#errors")).includes("Net long exposure"), "error explains the net-exposure cap");
   // (2) A 5th leg is refused with a message instead of silently dropping one.
   await page.locator("#legsList li button").first().click();
@@ -273,6 +273,77 @@ try {
   check(!(await pmo.evaluate(() => document.querySelector("#screen-results").classList.contains("ceremony"))) && (await pmo.isHidden("#revealSkip")), "the ceremony can be skipped");
   await motion.close();
 
+  // (9) Second review: keyboard focus, announcements, history and loading races.
+  await page.goto(`http://127.0.0.1:${PORT}/#/`);
+  await page.click('.nav a[data-nav="how"]');
+  await page.click('.nav a[data-nav="home"]');
+  await page.click("#startQuick");
+  await page.waitForSelector("#priceChart canvas");
+  await page.focus("#nextTurn");
+  await page.keyboard.press("Enter");
+  await page.waitForFunction(() => document.querySelector("#sTurn").textContent.startsWith("2 of"));
+  await page.waitForTimeout(450);
+  check(await page.evaluate(() => document.activeElement?.id === "nextTurn"), "keyboard focus stays on the next-month button after a month");
+  await page.locator("#quotesTable tr.atm button.px[data-side='B'][data-type='C']").click();
+  const added = await page.waitForFunction(() => document.querySelector("#orderStatus").textContent.startsWith("Added: Buy 100%-strike calls"), null, { timeout: 2000 }).then(() => true).catch(() => false);
+  check(added, "adding an option is announced");
+  await page.locator("#legsList li button").first().click();
+  await page.focus(".skip-link");
+  await page.keyboard.press("Enter");
+  check(!(await page.isHidden("#screen-game")) && (await page.evaluate(() => location.hash)) === "#/play", "skip link keeps the current screen");
+  await page.click(".autopilot summary");
+  await page.click("#autoRun");
+  await page.waitForSelector("#resEquityChart canvas");
+  check(await page.evaluate(() => document.activeElement?.id === "revealTitle"), "finishing moves focus to the results heading");
+  await page.goBack();
+  await page.waitForTimeout(300);
+  check((await page.evaluate(() => location.hash)) !== "#/results" && (await page.isHidden("#screen-results")), "Back from the results leaves them");
+  // A saved game is restored once even if the player navigates while its prices load.
+  await page.goto(`http://127.0.0.1:${PORT}/#/`);
+  await page.click("#startQuick");
+  await page.waitForSelector("#priceChart canvas");
+  for (let i = 0; i < 3; i++) {
+    await page.click('.quick-btns button[data-x="50"]');
+    await page.click("#nextTurn");
+    await page.waitForFunction((n) => document.querySelector("#sTurn").textContent.startsWith(`${n} of`), i + 2);
+  }
+  const savedBefore = await page.evaluate(() => localStorage.getItem("bt-save-v1"));
+  await page.route("**/data/prices/*.json", async (r) => { await new Promise((ok) => setTimeout(ok, 1200)); await r.continue(); });
+  await page.reload();
+  await page.waitForSelector("#homeData strong", { state: "attached" }); // the index is in; the stock's prices are still loading
+  await page.click('.nav a[data-nav="how"]');
+  await page.click('.nav a[data-nav="home"]');
+  await page.waitForSelector("#resumeCard:not([hidden])", { timeout: 8000 });
+  await page.unroute("**/data/prices/*.json");
+  check((await page.textContent("#resumeText")).startsWith("Month 4 of 12") && (await page.evaluate(() => localStorage.getItem("bt-save-v1"))) === savedBefore, "navigating while a saved game loads restores it once");
+
+  // (10) Space skips the reveal without scrolling the page.
+  const motion2 = await browser.newContext({ viewport: { width: 1280, height: 800 }, reducedMotion: "no-preference" });
+  const pm2 = await motion2.newPage();
+  pm2.on("pageerror", (e) => errors.push(String(e)));
+  await pm2.goto(`http://127.0.0.1:${PORT}/`);
+  await pm2.click("#startQuick");
+  await pm2.waitForSelector("#priceChart canvas");
+  await pm2.click(".autopilot summary");
+  await pm2.click("#autoRun");
+  await pm2.waitForFunction(() => document.querySelector("#screen-results").classList.contains("ceremony"), null, { timeout: 10000 });
+  await pm2.keyboard.press(" ");
+  await pm2.waitForTimeout(150);
+  check(!(await pm2.evaluate(() => document.querySelector("#screen-results").classList.contains("ceremony"))) && (await pm2.evaluate(() => window.scrollY)) === 0, "Space skips the reveal without scrolling");
+  await motion2.close();
+
+  // (11) The scorecard fits at tablet and small-laptop widths.
+  for (const w of [768, 1024]) {
+    const tc = await browser.newContext({ viewport: { width: w, height: 900 }, reducedMotion: "reduce" });
+    const tp = await tc.newPage();
+    tp.on("pageerror", (e) => errors.push(String(e)));
+    await tp.goto(url);
+    await tp.waitForSelector("#resEquityChart canvas");
+    const fits = await tp.evaluate(() => { const t = document.querySelector("#scoreTable"); return t.scrollWidth <= t.parentElement.clientWidth + 1; });
+    check(fits, `scorecard fits without sideways scrolling at ${w}px`);
+    await tc.close();
+  }
+
   // How it works + data pages.
   await page.goto(`http://127.0.0.1:${PORT}/#/data`);
   await page.waitForSelector("#dataTable tbody tr");
@@ -306,6 +377,14 @@ try {
   check(bar.fits && bar.h >= 44, `mobile action bar fits with a 44px button (${bar.h}px)`);
   const small = await pm.evaluate(() => [...document.querySelectorAll(".quick-btns button, #quotesTable button.px, #addLeg")].filter((b) => b.getBoundingClientRect().height < 44).length);
   check(small === 0, `mobile touch targets are at least 44px tall (${small} smaller)`);
+  await pm.locator("#quotesTable tr.atm button.px[data-side='B'][data-type='C']").click();
+  const tiny = await pm.evaluate(() => [...document.querySelectorAll(".brand, .nav a, #themeToggle, .legs li button, details.help > summary, .autopilot > summary")]
+    .filter((b) => b.getClientRects().length && (b.getBoundingClientRect().height < 44 || b.getBoundingClientRect().width < 44)).map((b) => b.id || b.className || b.textContent.trim()));
+  check(tiny.length === 0 && (await pm.evaluate(() => document.querySelector("#stockSlider").getBoundingClientRect().height)) >= 44, `mobile header, help, leg and slider targets are at least 44px${tiny.length ? ": " + tiny.join(", ") : ""}`);
+  const monthLines = await pm.evaluate(() => { const e = document.querySelector("#sTurn"); return Math.round(e.getBoundingClientRect().height / parseFloat(getComputedStyle(e).lineHeight)); });
+  check(monthLines === 1, `mobile month counter stays on one line (${monthLines})`);
+  const headerFits = await pm.evaluate(() => { const t = document.querySelector(".topbar"); return t.scrollWidth <= t.clientWidth + 1; });
+  check(headerFits, "mobile header fits");
   await pm.click(".autopilot summary");
   const overflow2 = await pm.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
   check(overflow2 <= 1, `no horizontal scroll on mobile with autopilot open (overflow ${overflow2}px)`);
@@ -316,6 +395,9 @@ try {
   check(overflow3 <= 1, `no horizontal scroll on mobile results (overflow ${overflow3}px)`);
   const tableFits = await pm.evaluate(() => { const w = document.querySelector("#scoreTable"); return w.scrollWidth <= w.parentElement.clientWidth + 1; });
   check(tableFits, "mobile scorecard fits without sideways scrolling");
+  const tinyRes = await pm.evaluate(() => [...document.querySelectorAll("#scoreHelp > summary, details.block > summary, .results-actions button")]
+    .filter((b) => b.getClientRects().length && (b.getBoundingClientRect().height < 44 || b.getBoundingClientRect().width < 44)).map((b) => b.id || b.textContent.trim()));
+  check(tinyRes.length === 0, `mobile results targets are at least 44px${tinyRes.length ? ": " + tinyRes.join(", ") : ""}`);
   await pm.screenshot({ path: OUT + "11-mobile-results.png", fullPage: true });
   await mobile.close();
 

@@ -25,7 +25,8 @@ try {
   await page.waitForSelector("#homeData strong");
   await page.screenshot({ path: OUT + "home.png" });
 
-  // A blind full game, a few turns in, with a covered call on the ticket (a wider frame so it reads larger in the PDF).
+  // A blind full game at month 9, long 100% with a covered call just added from the quotes (the leg itself sits
+  // below the fold; the frame is kept short so it reads larger in the PDF).
   await page.setViewportSize({ width: 1280, height: 880 });
   await page.click("#startFull");
   await page.waitForSelector("#priceChart canvas");
@@ -38,7 +39,7 @@ try {
   await page.locator("#quotesTable tbody tr").nth(3).locator("button.px").nth(0).click();
   await page.waitForFunction(() => !document.querySelector("#nextTurn").disabled);
   await page.evaluate(() => window.scrollTo(0, 0));
-  await page.mouse.move(420, 300);
+  await page.mouse.move(5, 5); // off the charts, so their legends show the latest month
   await page.screenshot({ path: OUT + "game.png", fullPage: false });
   await page.setViewportSize({ width: 1280, height: 1010 });
 

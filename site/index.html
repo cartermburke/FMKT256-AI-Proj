@@ -30,6 +30,7 @@
   </header>
 
   <div id="staleBanner" class="banner" role="status" hidden></div>
+  <div id="tabNote" class="banner" role="status" hidden></div>
 
   <main id="app" tabindex="-1">
     <!-- HOME -->
@@ -127,7 +128,7 @@
           <div class="field">
             <div class="field-head">
               <label for="stockSlider">Stock position</label>
-              <output id="stockOut" for="stockSlider">Keep current</output>
+              <output id="stockOut" for="stockSlider" aria-live="off">Keep current</output>
             </div>
             <div class="slider-wrap">
               <input type="range" id="stockSlider" min="-100" max="150" step="5" value="0" aria-describedby="stockHelp">
@@ -181,13 +182,15 @@
             </div>
             <details class="help">
               <summary>How options work here</summary>
-              <p>Each option expires at the end of the month (21 trading days) and settles in cash. Selling at the bid writes the option; buying at the ask buys it. Written calls must be covered by shares you hold, and written puts need cash equal to the strike value. Implied vol rises for lower strikes: puts are priced richer than calls. In-the-money prices are shaded.</p>
+              <p>Each option expires at the end of the month (21 trading days) and settles in cash. Selling at the bid writes the option; buying at the ask buys it. Written calls must be covered by shares you hold, and written puts need cash equal to the strike value. Implied vol rises for lower strikes: puts are priced richer than calls. Calls below 100% and puts above 100% are in the money; their prices are shaded.</p>
             </details>
             <ul class="legs" id="legsList"></ul>
+            <p class="sr-only" id="orderStatus" role="status" aria-live="polite"></p>
           </div>
 
           <div class="preview" id="preview"></div>
-          <ul class="errors" id="errors" role="alert"></ul>
+          <ul class="errors" id="errors"></ul>
+          <p class="sr-only" id="errorAlert" role="alert"></p>
 
           <details class="autopilot">
             <summary>Autopilot</summary>
@@ -203,7 +206,7 @@
         <section class="panel panel-account" aria-labelledby="accountTitle">
           <div class="panel-head">
             <h2 id="accountTitle">Your account</h2>
-            <p class="panel-sub">Daily value of your account next to simply holding the stock</p>
+            <p class="panel-sub" id="accountSub">Daily value of your account next to simply holding the stock</p>
           </div>
           <p class="empty" id="equityEmpty">Your account line starts after month 1.</p>
           <div class="chart chart-account" id="equityChart"></div>
@@ -225,7 +228,7 @@
     <section id="screen-results" class="screen" hidden>
       <div class="reveal" id="revealBlock">
         <p class="reveal-eyebrow" id="revealEyebrow">The tape is revealed</p>
-        <div class="reveal-title"><h1 id="revealTitle">–</h1><span class="redact-bar" aria-hidden="true"></span></div>
+        <div class="reveal-title"><h1 id="revealTitle" tabindex="-1">–</h1><span class="redact-bar" aria-hidden="true"></span></div>
         <p class="reveal-dates num" id="revealDates"><span class="cover" aria-hidden="true"></span><span id="revealDatesText"></span></p>
         <p class="reveal-vs" id="revealSub">–</p>
         <div class="chart chart-reveal" id="revealChart"></div>
@@ -328,15 +331,13 @@
 
       <h2 id="how-turn">A turn</h2>
       <figure class="turn-diagram">
-        <svg viewBox="0 0 640 150" role="img" aria-labelledby="turnDiagTitle">
-          <title id="turnDiagTitle">One turn: you place orders at the month's first close, the month plays out day by day, options expire, and the next month starts.</title>
-          <g class="td-box"><rect x="4" y="30" width="150" height="74" rx="8"/><text x="79" y="58">You decide</text><text x="79" y="80" class="td-sub">stock + options</text></g>
-          <g class="td-box"><rect x="186" y="30" width="190" height="74" rx="8"/><text x="281" y="58">21 trading days</text><text x="281" y="80" class="td-sub">marked to market daily</text></g>
-          <g class="td-box"><rect x="408" y="30" width="110" height="74" rx="8"/><text x="463" y="58">Options</text><text x="463" y="80" class="td-sub">expire in cash</text></g>
-          <g class="td-box td-end"><rect x="550" y="30" width="86" height="74" rx="8"/><text x="593" y="58">Next</text><text x="593" y="80" class="td-sub">month</text></g>
-          <g class="td-arrows"><path d="M156 67h26M378 67h26M520 67h26"/></g>
-          <text x="281" y="132" class="td-note">A margin check runs at every daily close</text>
-        </svg>
+        <ol class="turn-steps" aria-label="One turn, in order">
+          <li><strong>You decide</strong><span>stock and options, at the month's first close</span></li>
+          <li><strong>21 trading days</strong><span>marked to market daily</span></li>
+          <li><strong>Options expire</strong><span>settled in cash</span></li>
+          <li class="ts-end"><strong>Next month</strong><span>you decide again</span></li>
+        </ol>
+        <figcaption>A margin check runs at every daily close.</figcaption>
       </figure>
 
       <h2 id="how-rules">Rules</h2>
