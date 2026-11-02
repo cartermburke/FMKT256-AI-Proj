@@ -18,7 +18,7 @@ await new Promise((r) => setTimeout(r, 800));
 const base = `http://127.0.0.1:${PORT}/`;
 const browser = await chromium.launch();
 try {
-  const ctx = await browser.newContext({ viewport: { width: 1280, height: 1010 }, deviceScaleFactor: 2, colorScheme: "light" });
+  const ctx = await browser.newContext({ viewport: { width: 1280, height: 1010 }, deviceScaleFactor: 2, colorScheme: "light", reducedMotion: "reduce" });
   const page = await ctx.newPage();
 
   await page.goto(base);
@@ -73,7 +73,7 @@ try {
   await page.waitForSelector("#dataTable tbody tr");
   await page.screenshot({ path: OUT + "data.png" });
 
-  const mob = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
+  const mob = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true, reducedMotion: "reduce" });
   const pm = await mob.newPage();
   await pm.goto(`${base}#/replay/${code}`);
   await pm.waitForSelector("#resEquityChart canvas");

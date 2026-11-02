@@ -39,7 +39,7 @@ const check = (cond, msg) => {
 
 const browser = await chromium.launch();
 try {
-  const ctx = await browser.newContext({ viewport: { width: 1360, height: 900 }, colorScheme: "light" });
+  const ctx = await browser.newContext({ viewport: { width: 1360, height: 900 }, colorScheme: "light", reducedMotion: "reduce" });
   await ctx.grantPermissions(["clipboard-read", "clipboard-write"]);
   const page = await ctx.newPage();
   page.on("console", (m) => { if (m.type() === "error") errors.push(m.text()); });
@@ -219,6 +219,55 @@ try {
   await page.waitForTimeout(800);
   check((await page.textContent("#staleBanner")).includes("isn't valid"), "invalid replay link is rejected");
 
+  // Redesign checks ------------------------------------------------------------
+  // (6) The next-month button names the action; Enter advances; a reload keeps the game.
+  await page.goto(`http://127.0.0.1:${PORT}/#/`);
+  await page.click("#startQuick");
+  await page.waitForSelector("#priceChart canvas");
+  check((await page.textContent("#nextTurn")) === "Hold, go to month 2", "next-month button names a hold");
+  await page.click('.quick-btns button[data-x="50"]');
+  check((await page.textContent("#nextTurn")) === "Trade and go to month 2", "next-month button names a trade");
+  await page.evaluate(() => document.activeElement && document.activeElement.blur());
+  await page.keyboard.press("Enter");
+  const entered = await page.waitForFunction(() => document.querySelector("#sTurn").textContent.startsWith("2 of"), null, { timeout: 2000 }).then(() => true).catch(() => false);
+  check(entered, "Enter advances the month when nothing has focus");
+  const titleBefore = await page.textContent("#priceTitle");
+  await page.reload();
+  await page.waitForSelector("#priceChart canvas");
+  check((await page.textContent("#sTurn")).startsWith("2 of 12") && (await page.textContent("#priceTitle")) === titleBefore, "reload restores the game in progress");
+  // (7) Results lead with a verdict in words; Play again keeps the mode and blind setting.
+  await page.click(".autopilot summary");
+  await page.selectOption("#autoStrat", "trend200");
+  await page.click("#autoRun");
+  await page.waitForSelector("#resEquityChart canvas");
+  const verdict = await page.textContent("#verdict");
+  check(/^(Tied )?\d+(st|nd|rd|th) of \d+/.test(verdict), `verdict in words: ${verdict}`);
+  check(!(await page.textContent("#coachNotes")).includes("Versus the benchmarks") && (await page.textContent("#versusNote")).includes("Versus the benchmarks"), "benchmark note sits beside the verdict");
+  await page.reload();
+  await page.waitForSelector("#resEquityChart canvas");
+  check((await page.textContent("#verdict")) === verdict, "reload restores the finished game's results");
+  await page.click("#playAgain");
+  await page.waitForSelector("#screen-game:not([hidden])");
+  await page.waitForSelector("#priceChart canvas");
+  const sameMode = (await page.textContent("#sTurn")).startsWith("1 of 12") && ((await page.textContent("#priceTitle")) === "Mystery stock") === (titleBefore === "Mystery stock");
+  check(sameMode, "Play again starts the same mode and blind setting");
+
+  // (8) The reveal ceremony (motion allowed here on purpose): final text from the first frame, skippable.
+  const motion = await browser.newContext({ viewport: { width: 1280, height: 800 }, reducedMotion: "no-preference" });
+  const pmo = await motion.newPage();
+  pmo.on("pageerror", (e) => errors.push(String(e)));
+  pmo.on("console", (m) => { if (m.type() === "error") errors.push(m.text()); });
+  await pmo.goto(`http://127.0.0.1:${PORT}/`);
+  await pmo.click("#startQuick");
+  await pmo.waitForSelector("#priceChart canvas");
+  await pmo.click(".autopilot summary");
+  await pmo.click("#autoRun");
+  await pmo.waitForSelector("#screen-results.ceremony");
+  check(/^It was .+\(.+\)$/.test(await pmo.textContent("#revealTitle")), "reveal title is final while the ceremony runs");
+  await pmo.click("#revealSkip");
+  check(!(await pmo.evaluate(() => document.querySelector("#screen-results").classList.contains("ceremony"))) && (await pmo.isHidden("#revealSkip")), "the ceremony can be skipped");
+  await motion.close();
+
   // How it works + data pages.
   await page.goto(`http://127.0.0.1:${PORT}/#/data`);
   await page.waitForSelector("#dataTable tbody tr");
@@ -228,7 +277,7 @@ try {
   await page.screenshot({ path: OUT + "08-how.png", fullPage: true });
 
   // Dark mode + mobile.
-  const dark = await browser.newContext({ viewport: { width: 1360, height: 900 }, colorScheme: "dark" });
+  const dark = await browser.newContext({ viewport: { width: 1360, height: 900 }, colorScheme: "dark", reducedMotion: "reduce" });
   const pd = await dark.newPage();
   pd.on("pageerror", (e) => errors.push(String(e)));
   await pd.goto(url);
@@ -236,7 +285,7 @@ try {
   await pd.screenshot({ path: OUT + "09-results-dark.png", fullPage: true });
   await dark.close();
 
-  const mobile = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
+  const mobile = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true, reducedMotion: "reduce" });
   const pm = await mobile.newPage();
   pm.on("pageerror", (e) => errors.push(String(e)));
   await pm.goto(`http://127.0.0.1:${PORT}/`);
@@ -244,6 +293,14 @@ try {
   await pm.waitForSelector("#priceChart canvas");
   const overflow = await pm.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
   check(overflow <= 1, `no horizontal scroll on mobile (overflow ${overflow}px)`);
+  const bar = await pm.evaluate(() => {
+    const b = document.querySelector("#actionBar");
+    const r = document.querySelector("#nextTurn").getBoundingClientRect();
+    return { fits: b.scrollWidth <= b.clientWidth + 1 && r.right <= window.innerWidth && r.bottom <= window.innerHeight, h: r.height };
+  });
+  check(bar.fits && bar.h >= 44, `mobile action bar fits with a 44px button (${bar.h}px)`);
+  const small = await pm.evaluate(() => [...document.querySelectorAll(".quick-btns button, #quotesTable button.px, #addLeg")].filter((b) => b.getBoundingClientRect().height < 44).length);
+  check(small === 0, `mobile touch targets are at least 44px tall (${small} smaller)`);
   await pm.click(".autopilot summary");
   const overflow2 = await pm.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
   check(overflow2 <= 1, `no horizontal scroll on mobile with autopilot open (overflow ${overflow2}px)`);
