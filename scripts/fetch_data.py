@@ -113,7 +113,7 @@ def from_fred_dtb3(symbol: str, start: dt.date) -> pd.Series:
     if symbol != "^IRX":
         raise RuntimeError("FRED only used for ^IRX")
     url = f"https://fred.stlouisfed.org/graph/fredgraph.csv?id=DTB3&cosd={start.isoformat()}"
-    r = requests.get(url, headers=UA, timeout=30)
+    r = requests.get(url, headers=UA, timeout=60)
     r.raise_for_status()
     df = pd.read_csv(io.StringIO(r.text))
     df.columns = ["date", "value"]
@@ -157,8 +157,9 @@ def validate(symbol: str, s: pd.Series, kind: str, min_days: int) -> list[str]:
     if any(not math.isfinite(v) for v in vals):
         problems.append("non-finite values")
     if kind == "rate":
-        if (s < 0).any() or (s > 25).any():
-            problems.append("rate outside [0, 25]%")
+        # T-bill yields dipped slightly below zero in 2020-21, so allow small negatives.
+        if (s < -1).any() or (s > 25).any():
+            problems.append("rate outside [-1, 25]%")
     elif (s <= 0).any():
         problems.append("non-positive prices")
     gaps = s.index.to_series().diff().dt.days.dropna()
