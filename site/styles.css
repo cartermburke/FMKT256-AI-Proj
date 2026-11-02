@@ -413,7 +413,6 @@ table { border-collapse: collapse; width: 100%; }
 .badge { font-size: 11px; font-weight: 700; padding: 1px 7px; border-radius: 999px; border: 1px solid currentColor; }
 .badge.good { color: var(--gain); } .badge.bad { color: var(--loss); } .badge.neutral { color: var(--ink-2); }
 details.block > summary { cursor: pointer; min-height: 36px; display: flex; align-items: center; }
-.u-legend .u-series:first-child { display: none; }
 
 /* The reveal ceremony: final values are in the DOM from the first frame; only these
    aria-hidden layers and pseudo-elements move, and only transform and opacity. */
