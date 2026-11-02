@@ -1,99 +1,99 @@
 {
-  "as_of": "2026-10-30",
-  "updated_at": "2026-11-02T01:53:25Z",
+  "as_of": "2026-11-02",
+  "updated_at": "2026-11-02T23:52:10Z",
   "stale": false,
   "failures": {},
   "series": {
     "NVDA": {
       "symbol": "NVDA",
       "source": "yfinance",
-      "rows": 1757,
+      "rows": 1758,
       "first": "2019-11-04",
-      "last": "2026-10-30"
+      "last": "2026-11-02"
     },
     "INTC": {
       "symbol": "INTC",
       "source": "yfinance",
-      "rows": 1757,
+      "rows": 1758,
       "first": "2019-11-04",
-      "last": "2026-10-30"
+      "last": "2026-11-02"
     },
     "PYPL": {
       "symbol": "PYPL",
       "source": "yfinance",
-      "rows": 1757,
+      "rows": 1758,
       "first": "2019-11-04",
-      "last": "2026-10-30"
+      "last": "2026-11-02"
     },
     "MU": {
       "symbol": "MU",
       "source": "yfinance",
-      "rows": 1757,
+      "rows": 1758,
       "first": "2019-11-04",
-      "last": "2026-10-30"
+      "last": "2026-11-02"
     },
     "TSLA": {
       "symbol": "TSLA",
       "source": "yfinance",
-      "rows": 1757,
+      "rows": 1758,
       "first": "2019-11-04",
-      "last": "2026-10-30"
+      "last": "2026-11-02"
     },
     "KO": {
       "symbol": "KO",
       "source": "yfinance",
-      "rows": 1757,
+      "rows": 1758,
       "first": "2019-11-04",
-      "last": "2026-10-30"
+      "last": "2026-11-02"
     },
     "XOM": {
       "symbol": "XOM",
       "source": "yfinance",
-      "rows": 1757,
+      "rows": 1758,
       "first": "2019-11-04",
-      "last": "2026-10-30"
+      "last": "2026-11-02"
     },
     "CRWD": {
       "symbol": "CRWD",
       "source": "yfinance",
-      "rows": 1757,
+      "rows": 1758,
       "first": "2019-11-04",
-      "last": "2026-10-30"
+      "last": "2026-11-02"
     },
     "DIS": {
       "symbol": "DIS",
       "source": "yfinance",
-      "rows": 1757,
+      "rows": 1758,
       "first": "2019-11-04",
-      "last": "2026-10-30"
+      "last": "2026-11-02"
     },
     "UBER": {
       "symbol": "UBER",
       "source": "yfinance",
-      "rows": 1757,
+      "rows": 1758,
       "first": "2019-11-04",
-      "last": "2026-10-30"
+      "last": "2026-11-02"
     },
     "SPY": {
       "symbol": "SPY",
       "source": "yfinance",
-      "rows": 1757,
+      "rows": 1758,
       "first": "2019-11-04",
-      "last": "2026-10-30"
+      "last": "2026-11-02"
     },
     "VIX": {
       "symbol": "^VIX",
       "source": "yfinance",
-      "rows": 1759,
+      "rows": 1760,
       "first": "2019-11-04",
-      "last": "2026-10-30"
+      "last": "2026-11-02"
     },
     "IRX": {
       "symbol": "^IRX",
       "source": "yfinance",
-      "rows": 1757,
+      "rows": 1758,
       "first": "2019-11-04",
-      "last": "2026-10-30"
+      "last": "2026-11-02"
     }
   },
   "pool": [
@@ -169,5 +169,5 @@
   "benchmark": "SPY",
   "game_years": 5,
   "repo": "cartermburke/FMKT256-AI-Proj",
-  "run_url": "https://github.com/cartermburke/FMKT256-AI-Proj/actions/runs/41374760815"
+  "run_url": "https://github.com/cartermburke/FMKT256-AI-Proj/actions/runs/41548601874"
 }
