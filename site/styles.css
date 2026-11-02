@@ -206,6 +206,8 @@ details.help p + p { margin-top: 6px; }
 .tape-demo { margin: 0; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px; box-shadow: var(--shadow); }
 .tape-head, .tape-foot { display: flex; justify-content: space-between; align-items: center; font-size: 13px; color: var(--muted); }
 .tape-name { position: relative; display: inline-block; font-weight: 600; color: var(--ink); min-width: 150px; height: 20px; }
+/* On narrow phones the date range wraps at "to", right-aligned to the card edge. */
+.tape-meta { text-align: right; text-wrap: balance; }
 .tape-redact { position: absolute; inset: 1px 0; background: var(--redact); border-radius: 2px; transform-origin: right center; }
 .tape-reveal { opacity: 0; }
 .tape-line { display: block; width: 100%; height: 96px; margin: 10px 0; }

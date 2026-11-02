@@ -938,18 +938,18 @@ try {
     await p.goto(`http://127.0.0.1:${PORT}/#/`);
     await p.waitForSelector("#tapeDemo.ready", { timeout: 4000 }).catch(() => {});
     check((await p.textContent("#homeData")).startsWith("10 stocks and the S&P 500"), "home counts 10 stocks and the S&P 500");
-    check((await p.textContent("#tapeName")) === "S&P 500 ETF (SPY)" && /^M0\.0 [\d.]+( L[\d.]+ [\d.]+){12,}$/.test(await p.getAttribute("#tapeDemo path", "d")), "the home page's sample tape is drawn from real prices");
-    // The S&P 500 is in the blind pool, so the sample shows only the months before today's game
-    // window: it never gives away a game's future.
+    check((await p.textContent("#tapeName")) === "S&P 500 ETF (SPY)" && /^M0\.0 [\d.]+( L[\d.]+ [\d.]+){6,}$/.test(await p.getAttribute("#tapeDemo path", "d")), "the home page's sample tape is drawn from real prices");
+    // The S&P 500 is in the blind pool, so the sample ends before the earliest day any current
+    // game's chart shows (a year before the game window): it can't give a blind game away.
     const tape = await p.evaluate(async () => {
       const meta = await (await fetch("data/meta.json")).json();
       const spy = await (await fetch("data/prices/SPY.json")).json();
       let last = spy.dates.length - 1;
       while (spy.dates[last] > meta.as_of) last--;
       const mon = (iso) => new Date(`${iso}T12:00:00Z`).toLocaleDateString("en-US", { month: "short", year: "numeric", timeZone: "UTC" });
-      return { label: document.querySelector("#tapeMeta").textContent, win: mon(spy.dates[last - (meta.game_years || 5) * 12 * 21]) };
+      return { label: document.querySelector("#tapeMeta").textContent, win: mon(spy.dates[last - (meta.game_years || 5) * 12 * 21 - 252]) };
     });
-    check(/^[A-Z][a-z]{2} \d{4} to [A-Z][a-z]{2} \d{4}$/.test(tape.label) && tape.label.endsWith(` to ${tape.win}`), `the sample tape ends where today's game window starts (${tape.label}; window from ${tape.win})`);
+    check(/^[A-Z][a-z]{2} \d{4} to [A-Z][a-z]{2} \d{4}$/.test(tape.label) && tape.label.endsWith(` to ${tape.win}`), `the sample tape ends where the earliest game chart begins (${tape.label}; charts from ${tape.win})`);
     const tieRule = /equal averages go to the higher Sharpe( ratio)?, then the higher IRR/i;
     check(tieRule.test(await p.textContent("#scoreHelp")) && tieRule.test(await p.textContent("#screen-how")), "the scorecard help and How it works say how equal average ranks are ordered");
     await p.goto(`http://127.0.0.1:${PORT}/#/how`);
@@ -984,6 +984,50 @@ try {
     await p.goto(chUrl);
     await p.waitForFunction(() => location.hash === "#/how" && !document.querySelector("#screen-how").hidden, null, { timeout: 4000 }).catch(() => {});
     check(dialogs.length === before + 1 && (await p.evaluate(() => location.hash)) === "#/how" && !(await p.isHidden("#screen-how")), "No to a challenge opened from How it works goes back there");
+    await c.close();
+  });
+  await block(async () => {
+    // No to a challenge on the entry a tab opened on goes home, never out of the app; No to a
+    // link pasted while the data loads goes back to the page; a damaged link over a replay
+    // still offers the saved game.
+    const { c, p } = await fresh();
+    await p.goto(`http://127.0.0.1:${PORT}/#/`);
+    await p.click("#startQuick");
+    await p.waitForSelector("#priceChart canvas");
+    await playMonths(p, 1);
+    const p2 = await c.newPage();
+    p2.on("pageerror", (e) => errors.push(String(e)));
+    const partial = linkOf({ v: 1, sym: "KO", end: "2026-10-30", fullTurns: 60, startTurn: 0, turns: 12, blind: true, seed: 1, mode: "quick", by: "Pat" }, [[100, ""]]);
+    await p2.goto(`http://127.0.0.1:${PORT}/#/challenge/${partial}`);
+    await p2.waitForFunction(() => document.querySelector("#staleBanner").textContent.includes("incomplete"), null, { timeout: 5000 }).catch(() => {});
+    await p2.click('.nav a[data-nav="how"]');
+    await p2.waitForSelector("#screen-how:not([hidden])");
+    p2.answer = false;
+    await p2.goBack();
+    await p2.waitForTimeout(800);
+    const where = await p2.evaluate(() => ({ url: location.href, home: !document.querySelector("#screen-home")?.hidden }));
+    check(where.url.endsWith("#/") && where.home, `No to a challenge on the entry a tab opened on goes home (${where.url.slice(-24)})`);
+    await p2.close();
+    const p3 = await c.newPage();
+    p3.on("pageerror", (e) => errors.push(String(e)));
+    let release;
+    const gate = new Promise((ok) => { release = ok; });
+    await p3.route("**/data/meta.json", async (r) => { await gate; await r.continue(); });
+    await p3.goto(`http://127.0.0.1:${PORT}/#/how`);
+    await p3.waitForSelector("#screen-how:not([hidden])");
+    p3.answer = false;
+    await p3.goto(chUrl);
+    release();
+    await p3.waitForFunction(() => location.hash === "#/how" && !document.querySelector("#screen-how").hidden, null, { timeout: 5000 }).catch(() => {});
+    check((await p3.evaluate(() => location.hash)) === "#/how" && !(await p3.isHidden("#screen-how")), "No to a challenge pasted while the data loads goes back to the page");
+    await p3.close();
+    const cfg = { v: 1, sym: "KO", end: "2026-10-30", fullTurns: 60, startTurn: 0, turns: 12, blind: false, seed: 1, mode: "quick" };
+    await p.goto(`http://127.0.0.1:${PORT}/#/replay/${linkOf(cfg, Array(12).fill([100, ""]))}`);
+    await p.waitForSelector("#resEquityChart canvas");
+    await p.goto(`http://127.0.0.1:${PORT}/#/replay/${linkOf(cfg, []).slice(0, 31)}`);
+    await p.waitForSelector("#screen-home:not([hidden])");
+    await p.waitForSelector("#resumeCard:not([hidden])", { timeout: 4000 }).catch(() => {});
+    check(!(await p.isHidden("#resumeCard")) && (await p.textContent("#resumeText")).startsWith("Month 2 of 12"), "a damaged link opened over a replay still offers the saved game");
     await c.close();
   });
   await block(async () => {

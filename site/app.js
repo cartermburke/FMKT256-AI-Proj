@@ -15,6 +15,7 @@ import { money, pct, num, signClass, fmtDate, fmtMonthYear, isoToSec, change, or
 
 const $ = (id) => document.getElementById(id);
 const TD = RULES.turnDays;
+const HISTORY_DAYS = 252; // a game's price chart starts a year before the game
 const STRAT_COLORS = { you: "--s1", buyHold: "--s2", spy: "--s3", coveredCall: "--s4", protectivePut: "--s5", trend200: "--s6", challenger: "--s7" };
 // Benchmarks are muted and told apart by line pattern as well as color.
 const STRAT_DASH = { spy: [7, 4], coveredCall: [2, 3], protectivePut: [9, 3, 2, 3], trend200: [1, 4] };
@@ -58,6 +59,9 @@ async function init() {
     document.documentElement.style.setProperty("--ab-h", `${Math.ceil($("actionBar").getBoundingClientRect().height)}px`);
   }).observe($("actionBar"));
   await null; // the routing state below this function in the module is set up first
+  // Mark the entry this page loaded on: what is behind it isn't this page's, so a No to a
+  // challenge there goes home instead of stepping back.
+  history.replaceState({ ...history.state, landing: true }, "");
   route();
   try {
     S.meta = await loadMeta();
@@ -307,16 +311,7 @@ async function routeNow(seq) {
     await openChallenge(h.slice("#/challenge/".length), seq);
     return;
   }
-  // Leaving a replay drops it, so the game in progress (kept in storage) comes back.
-  if (S.replay) { S.game = null; S.replay = false; }
-  // A tab whose save was replaced elsewhere shows the saved game on the home screen, as a tab
-  // already there does.
-  if (S.saveStale && !["#/play", "#/results", "#/how", "#/data"].includes(h)) {
-    // The old game stays in memory (unsaved: saveStale blocks saveGame) until the saved one is
-    // in, so the game screen still showing while it loads never meets an empty game. The save
-    // is another tab's, so a failed load leaves it alone.
-    if (!(await restoreSave({ keep: true }))) S.game = null;
-  } else if (!S.game) await restoreSave();
+  await loadHomeGame(!["#/play", "#/results", "#/how", "#/data"].includes(h));
   if (seq !== routeSeq) return; // a newer route is queued; it picks the screen
   if (h === "#/play" && S.game && !S.game.over) { show("game"); renderGame(true); return; }
   if ((h === "#/play" || h === "#/results") && S.game && S.game.over) {
@@ -330,6 +325,21 @@ async function routeNow(seq) {
   if (h === "#/data") { show("data"); return; }
   show("home");
   renderResume();
+}
+
+/**
+ * Pick the game the screens outside a replay show. Leaving a replay drops it, so the game in
+ * progress (kept in storage) comes back. home: a tab whose save was replaced elsewhere shows
+ * the saved game on the home screen, as a tab already there does.
+ */
+async function loadHomeGame(home) {
+  if (S.replay) { S.game = null; S.replay = false; }
+  if (S.saveStale && home) {
+    // The old game stays in memory (unsaved: saveStale blocks saveGame) until the saved one is
+    // in, so the game screen still showing while it loads never meets an empty game. The save
+    // is another tab's, so a failed load leaves it alone.
+    if (!(await restoreSave({ keep: true }))) S.game = null;
+  } else if (!S.game) await restoreSave();
 }
 
 function renderResume() {
@@ -443,9 +453,9 @@ function renderHomeMeta() {
 
 /**
  * The home page's sample tape is real: the S&P 500 ETF rebased to 100 like a blind game, over
- * the months just before the current game window. Those months are the history a game shows
- * before its start, so the sample never gives away any game's future (the S&P 500 is in the
- * blind pool). It stays an empty frame if the prices can't be loaded.
+ * months that end before the earliest day any current game's chart shows (a year before the
+ * game window). The S&P 500 is in the blind pool, so the sample can't give away a game's future
+ * or let a blind game be recognized. It stays an empty frame if the prices can't be loaded.
  */
 async function drawHeroTape() {
   let spy;
@@ -455,10 +465,10 @@ async function drawHeroTape() {
   const closes = spy.close || [];
   let last = dates.length - 1;
   while (last > 0 && dates[last] > m.as_of) last--;
-  const end = last - (m.game_years || 5) * 12 * TD; // the first day of today's game window
+  const end = last - (m.game_years || 5) * 12 * TD - HISTORY_DAYS; // where the earliest game chart begins
   const months = Math.min(24, Math.floor(end / TD));
   const start = end - months * TD;
-  if (months < 12 || !(closes[start] > 0)) return;
+  if (months < 6 || !(closes[start] > 0)) return;
   const pts = [];
   for (let d = start; d <= end; d += TD) pts.push((100 * closes[d]) / closes[start]);
   const lo = Math.min(...pts);
@@ -666,7 +676,7 @@ function renderGame(fresh = false) {
   $("accountSub").textContent = `Daily value of your account next to simply holding the stock${S.cfg.blind ? " · axis: months from the start" : ""}`;
 
   // Price history: up to one year before the start, through today, with the player's trades marked.
-  const from = Math.max(0, g.startIdx - 252);
+  const from = Math.max(0, g.startIdx - HISTORY_DAYS);
   const xs = [];
   const px = [];
   const ma = [];
@@ -1374,7 +1384,7 @@ async function openChallenge(code, seq = routeSeq) {
   }
   // Only one game is kept, so ask before a challenge replaces a game in progress (a damaged
   // link replaces nothing, so it goes straight to its error). On a No, go back to where the
-  // player was; a link that opened the tab goes home, with its Resume card.
+  // player was; on the entry the tab opened on, go home, with its Resume card.
   let linkOk = true;
   try {
     const r = decodeLink(code, "challenge");
@@ -1382,13 +1392,13 @@ async function openChallenge(code, seq = routeSeq) {
   } catch { linkOk = false; }
   if (linkOk && !okToReplace("Open this challenge?")) {
     if (seq !== routeSeq) return;
-    if (fromGame || S.screen) { history.back(); return; }
-    history.replaceState(null, "", "#/");
+    if (!history.state?.landing) { history.back(); return; } // an entry this page added: one of its own is behind it
+    history.replaceState({ landing: true }, "", "#/");
     return routeNow(seq);
   }
   // Mark the entry, so Back to it (if the player moves on while it loads) is told apart from
   // opening the link again.
-  if (seq === routeSeq) history.replaceState({ challenge: true }, "");
+  if (seq === routeSeq) history.replaceState({ ...history.state, challenge: true }, "");
   const saved = { cfg: S.cfg, market: S.market, spyMarket: S.spyMarket, game: S.game, actions: S.actions, benchmarks: S.benchmarks, replay: S.replay, challenger: S.challenger, challengeCode: S.challengeCode };
   try {
     const { cfg, actions } = decodeLink(code, "challenge");
@@ -1409,7 +1419,7 @@ async function openChallenge(code, seq = routeSeq) {
     for (const k of Object.keys(S.charts)) { S.charts[k].destroy(); delete S.charts[k]; }
     fatal(e, { quiet: true });
     if (seq !== routeSeq) return;
-    if (!S.game) await restoreSave(); // a link that opened the tab: the saved game can be resumed
+    await loadHomeGame(true); // home offers the game #/ would
     if (seq !== routeSeq) return;
     show("home");
     renderResume();
@@ -1445,7 +1455,7 @@ async function openReplay(code, seq = routeSeq) {
     for (const k of Object.keys(S.charts)) { S.charts[k].destroy(); delete S.charts[k]; }
     fatal(e, { quiet: true });
     if (seq !== routeSeq) return;
-    if (!S.game) await restoreSave(); // a link that opened the tab: the saved game can be resumed
+    await loadHomeGame(true); // home offers the game #/ would
     if (seq !== routeSeq) return;
     show("home");
     renderResume();
