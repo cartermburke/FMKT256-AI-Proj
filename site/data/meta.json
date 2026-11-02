@@ -1,6 +1,6 @@
 {
   "as_of": "2026-10-30",
-  "updated_at": "2026-11-02T01:41:19Z",
+  "updated_at": "2026-11-02T01:53:25Z",
   "stale": false,
   "failures": {},
   "series": {
@@ -109,10 +109,6 @@
     "UBER",
     "SPY"
   ],
-  "benchmark": "SPY",
-  "game_years": 5,
-  "repo": "cartermburke/FMKT256-AI-Proj",
-  "run_url": "https://github.com/cartermburke/FMKT256-AI-Proj/actions/runs/41373747048",
   "pool_info": [
     {
       "symbol": "NVDA",
@@ -169,5 +165,9 @@
       "name": "SPDR S&P 500 ETF",
       "regime": "The market"
     }
-  ]
+  ],
+  "benchmark": "SPY",
+  "game_years": 5,
+  "repo": "cartermburke/FMKT256-AI-Proj",
+  "run_url": "https://github.com/cartermburke/FMKT256-AI-Proj/actions/runs/41374760815"
 }
