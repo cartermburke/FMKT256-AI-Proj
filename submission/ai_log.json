@@ -1,0 +1,9 @@
+{
+  "process": [
+    "<b>Choosing the prompt:</b> Claude read the assignment and checked our real constraints: deadline, which data hosts were reachable, and existing tools. It then ran a six-agent panel. Three agents scoped one prompt each, and three judges scored the scopes as the grader, as a delivery lead and as a skeptical finance professor. The panel rated prompt 2 the safest. We chose prompt 1 because it was the most fun, and folded in the judges' warnings: test the math independently, never fake data, host on no-login pages, and fix the option-pricing bias.",
+    "<b>Building:</b> Claude (Anthropic's Claude Code) wrote the game engine, the user interface, the data downloader and the GitHub Actions automation from a plan we reviewed and approved. We made the product decisions (game design, ticker pool, branding) and did the GitHub settings, play-testing and review.",
+    "<b>Testing:</b> Claude wrote unit tests with hand-computed answers, an independent pandas recomputation of every metric on real data, and a browser test that plays the game through the UI. Running these caught real bugs during the build. One: the 5 bp trading cost made a maximum 150% long position fail the buying-power check. Another: chart axes lost their labels.",
+    "<b>Adversarial review:</b> after the build, separate AI agents audited it independently. One checked the finance math and looked for look-ahead bias, one tried to exploit or crash the game, and one played it as a first-time student on desktop, phone and dark mode. A fourth looked for what the first three missed. Every finding had to come with a reproduction; we confirmed each one before fixing it."
+  ],
+  "fixes": []
+}

@@ -2,7 +2,7 @@
 // Playwright/Chromium, checks for console errors, and saves screenshots.
 //   node tests/e2e.mjs            (screenshots -> tests/artifacts/)
 import { spawn } from "node:child_process";
-import { mkdirSync } from "node:fs";
+import { mkdirSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 
 const require = createRequire(import.meta.url);
@@ -23,11 +23,17 @@ await new Promise((r) => setTimeout(r, 800));
 
 const errors = [];
 let failed = false;
+const tally = { passed: 0, failed: 0, checks: [] };
 const check = (cond, msg) => {
+  tally.checks.push({ ok: !!cond, msg });
   if (!cond) {
     failed = true;
+    tally.failed++;
     console.error("FAIL:", msg);
-  } else console.log("ok:", msg);
+  } else {
+    tally.passed++;
+    console.log("ok:", msg);
+  }
 };
 
 const browser = await chromium.launch();
@@ -172,5 +178,6 @@ try {
 } finally {
   await browser.close();
   server.kill();
+  writeFileSync(OUT + "e2e_summary.json", JSON.stringify(tally, null, 2));
 }
 process.exit(failed ? 1 : 0);
