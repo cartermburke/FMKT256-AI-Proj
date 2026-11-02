@@ -322,82 +322,219 @@
     </section>
 
     <!-- HOW IT WORKS -->
-    <section id="screen-how" class="screen prose" hidden>
+    <!-- Reading view: every topic opens with an always-visible summary (.how-short); the detail sits
+         in a fold (details.how-more). Quick tour folds them all, Full detail opens them all, and each
+         fold still opens and closes on its own. Explain terms shows the .term-def glosses inline.
+         Both choices are kept per browser by app.js (initHow) and set before the page is shown. -->
+    <section id="screen-how" class="screen prose how" hidden>
       <h1>How it works</h1>
       <p class="lede">A trading game on real daily prices, scored the way a portfolio manager is judged.</p>
-      <nav class="toc" aria-label="On this page">
-        <a href="#/how" data-jump="how-turn">A turn</a>
-        <a href="#/how" data-jump="how-rules">Rules</a>
-        <a href="#/how" data-jump="how-options">Option pricing</a>
-        <a href="#/how" data-jump="how-scoring">Scoring</a>
-        <a href="#/how" data-jump="how-bench">Benchmarks</a>
-        <a href="#/how" data-jump="how-challenge">Challenges</a>
-        <a href="#/how" data-jump="how-data">Data</a>
-        <a href="#/how" data-jump="how-limits">Limits</a>
-      </nav>
 
+      <div class="how-bar">
+        <div class="how-view" role="group" aria-labelledby="howViewLabel">
+          <span class="how-view-label" id="howViewLabel">Reading view</span>
+          <div class="how-seg" role="group" aria-label="Detail">
+            <button type="button" data-how-depth="quick" aria-pressed="true">Quick tour</button>
+            <button type="button" data-how-depth="full" aria-pressed="false">Full detail</button>
+          </div>
+          <button type="button" class="how-switch" id="howTerms" aria-pressed="false"><span class="switch-track" aria-hidden="true"></span>Explain terms</button>
+        </div>
+        <p class="sr-only" id="howViewMsg" role="status"></p>
+        <nav class="toc" aria-label="On this page">
+          <a href="#/how" data-jump="how-turn">A turn</a>
+          <a href="#/how" data-jump="how-rules">Rules</a>
+          <a href="#/how" data-jump="how-options">Option pricing</a>
+          <a href="#/how" data-jump="how-scoring">Scoring</a>
+          <a href="#/how" data-jump="how-bench">Benchmarks</a>
+          <a href="#/how" data-jump="how-challenge">Challenges</a>
+          <a href="#/how" data-jump="how-data">Data</a>
+          <a href="#/how" data-jump="how-limits">Limits</a>
+        </nav>
+      </div>
+
+      <div class="how-numbers">
+        <h2 id="how-numbers">By the numbers</h2>
+        <!-- Filled by app.js (renderHowNumbers) from RULES and the data index. -->
+        <dl class="how-stats" id="howNumbers"></dl>
+      </div>
+
+      <section class="how-topic">
       <h2 id="how-turn">A turn</h2>
+      <p class="how-short">Each turn is one month. You place your orders at the month's first close, then 21 trading days play out and your <span class="term">options</span><span class="term-def"> (contracts that give the right, but not the duty, to buy or sell the stock at a set price)</span> expire.</p>
       <figure class="turn-diagram">
-        <ol class="turn-steps" aria-label="One turn, in order">
-          <li><strong>You decide</strong><span>stock and options, at the month's first close</span></li>
-          <li><strong>21 trading days</strong><span>marked to market daily</span></li>
-          <li><strong>Options expire</strong><span>settled in cash</span></li>
-          <li class="ts-end"><strong>Next month</strong><span>you decide again</span></li>
-        </ol>
-        <figcaption>A margin check runs at every daily close.</figcaption>
+      <ol aria-label="One turn, in order" class="turn-steps">
+      <li><strong>You decide</strong><span>stock and options, at the month's first close</span></li>
+      <li><strong>21 trading days</strong><span>marked to market daily</span></li>
+      <li><strong>Options expire</strong><span>settled in cash</span></li>
+      <li class="ts-end"><strong>Next month</strong><span>you decide again</span></li>
+      </ol>
+      <figcaption>A margin check runs at every daily close.</figcaption>
       </figure>
-
-      <h2 id="how-rules">Rules</h2>
+      <details class="how-more">
+      <summary>Day by day</summary>
+      <div class="how-more-body">
+      <p>At every daily close:</p>
       <ul>
-        <li><strong>Stake.</strong> $100,000, fixed. No deposits or withdrawals.</li>
-        <li><strong>The stock.</strong> Drawn at random from a pool with very different histories, including the S&amp;P 500 itself. In blind mode the name and dates are hidden and the price starts at 100; returns are unchanged.</li>
-        <li><strong>Window.</strong> The full challenge is the most recent 60 months (1,260 trading days) ending at the latest close. A quick round is a 12-month slice. Each turn is 21 trading days.</li>
-        <li><strong>Stock.</strong> A percent of equity, from −100% (short) to +150% (long on margin). Each trade costs 0.05% of the amount traded. Leave it alone and your share count stays the same.</li>
-        <li><strong>Options.</strong> European calls and puts at 90, 95, 100, 105 and 110% of the price, expiring at the end of the month and settled in cash. Size is a percent of equity. Up to four a month, 200% of equity at most in total.</li>
-        <li><strong>Leverage includes options.</strong> Net exposure, the stock plus each option's delta, must stay between −100% and +150% when you place an order.</li>
-        <li><strong>Writing options.</strong> Written calls must be covered by shares. Written puts need cash equal to the strike value after the whole order, not counting short-sale proceeds.</li>
-        <li><strong>Financing.</strong> Cash earns the 13-week T-bill rate. Borrowing pays T-bill + 1.5%, shorts pay 0.5% a year, and an order can't take borrowing above 50% of equity.</li>
-        <li><strong>Drift and margin.</strong> Limits apply to orders; between orders positions drift. If equity falls below 25% of the gross stock position, a margin call sells everything. At zero equity the game ends and the account ranks last.</li>
+      <li>Your positions are <span class="term">marked to market</span><span class="term-def"> (valued at that day's closing price)</span>.</li>
+      <li>Cash earns a day of interest. Borrowed cash pays a day of interest, and short shares a day of fees.</li>
+      <li>The margin check runs, on the last day too.</li>
       </ul>
+      <p>On the 21st trading day your options expire and are <span class="term">settled in cash</span><span class="term-def"> (paid out in cash, not shares)</span>. A call pays how far the price ends above its strike, a put how far it ends below. Otherwise it pays nothing. If you wrote the option, you pay that amount. Then you decide again.</p>
+      </div>
+      </details>
+      </section>
 
+      <section class="how-topic">
+      <h2 id="how-rules">Rules</h2>
+      <p class="how-short">You start with $100,000 and trade one stock and its options. You can go up to 150% <span class="term">long</span><span class="term-def"> (owning shares, so you gain when the price rises)</span> or 100% <span class="term">short</span><span class="term-def"> (selling borrowed shares, so you gain when the price falls)</span>, and a <span class="term">margin call</span><span class="term-def"> (a forced sale when the account's equity gets too thin for its positions)</span> closes everything if losses go too deep.</p>
+      <details class="how-more">
+      <summary>All the rules</summary>
+      <div class="how-more-body">
+      <ul>
+      <li><strong>Stake.</strong> $100,000, fixed. No deposits or withdrawals.</li>
+      <li><strong>The stock.</strong> Drawn at random from a pool with very different histories, including the S&amp;P 500 itself. You can also pick one, which turns blind mode off. In blind mode the name and dates are hidden and the price starts at 100. Returns are unchanged.</li>
+      <li><strong>Window.</strong> The full challenge is the most recent 60 months (1,260 trading days), ending at the latest close. A quick round is a random 12-month slice of it. Each turn is 21 trading days.</li>
+      <li><strong>Stock.</strong> Set as a percent of <span class="term">equity</span><span class="term-def"> (what the account is worth: cash plus positions, minus loans)</span>, from −100% (short) to +150% (<span class="term">long on margin</span><span class="term-def"> (owning more stock than the account is worth, with borrowed cash)</span>). Each trade costs 0.05% of the amount traded. Leave it alone and your share count stays the same.</li>
+      <li><strong>Options.</strong> <span class="term">Calls</span><span class="term-def"> (the right to buy the stock at a set price)</span> and <span class="term">puts</span><span class="term-def"> (the right to sell the stock at a set price)</span> at <span class="term">strikes</span><span class="term-def"> (the price an option lets you buy or sell at)</span> of 90, 95, 100, 105 and 110% of the price. They are <span class="term">European</span><span class="term-def"> (usable only at expiry, not before)</span>: they expire at the end of the month and settle in cash. Size is a percent of equity: 100% means options on as many shares as your equity would buy. Up to four option trades a month, at most 200% of equity in total.</li>
+      <li><strong>Leverage includes options.</strong> <span class="term">Net exposure</span><span class="term-def"> (your total bet on the stock, as a percent of equity)</span>, the stock plus each option's <span class="term">delta</span><span class="term-def"> (how strongly an option moves with the stock: 0 to 1 for calls, 0 to −1 for puts)</span>, must stay between −100% and +150% when you place an order.</li>
+      <li><strong>Writing options.</strong> <span class="term">Written</span><span class="term-def"> (sold to someone else: you collect the option's price and owe whatever it pays out)</span> calls must be covered by shares you hold. Written puts need cash equal to the strike value after the whole order, not counting short-sale proceeds.</li>
+      <li><strong>Financing.</strong> Cash earns the 13-week <span class="term">T-bill</span><span class="term-def"> (Treasury bill: short-term US government debt, the usual near-riskless return)</span> rate. Borrowing pays the T-bill rate + 1.5%. Short positions pay 0.5% a year. An order can't take borrowing above 50% of equity.</li>
+      <li><strong>Drift and margin.</strong> Limits apply to orders. Between orders, positions drift with the market. If equity falls below 25% of the gross stock position at any daily close, a margin call closes every position. At zero equity the game ends and the account ranks last.</li>
+      </ul>
+      </div>
+      </details>
+      <aside class="how-fact"><!-- Source: FINRA Rule 4210(c)(1), Maintenance Margin: "25 percent of the current market value of all
+             margin securities ... 'long' in the account" (finra.org/rules-guidance/rulebooks/finra-rules/4210).
+             The rule's 25% is for long stock; the game applies 25% to the gross stock position, long or
+             short (site/engine/game.js:16, 285-286), so the text says "stock bought on margin". -->
+      <p><span class="how-fact-label">Did you know?</span> The 25% margin line mirrors a real US rule: FINRA Rule 4210 requires equity of at least 25% of the value of stock bought on margin.</p></aside>
+      </section>
+
+      <section class="how-topic">
       <h2 id="how-options">Option pricing</h2>
-      <p>There are no free historical option quotes for every stock, so options are priced with Black-Scholes on an implied volatility built from that day's market data:</p>
+      <p class="how-short">Options are priced with the <span class="term">Black-Scholes</span><span class="term-def"> (a standard formula for an option's fair price)</span> formula, on a volatility built from that day's real market data. You buy a little above the model price and sell a little below it.</p>
+      <details class="how-more">
+      <summary>The pricing model</summary>
+      <div class="how-more-body">
+      <p>There are no free historical option quotes for every stock, so the game prices options with a model. Its <span class="term">implied volatility</span><span class="term-def"> (the yearly size of price swings that an option's price assumes)</span> comes from that day's market data:</p>
       <p class="formula num">IV<sub>atm</sub>² = RV<sub>63</sub>(stock)² + [ (0.88 × VIX/100)² − RV<sub>63</sub>(S&amp;P 500)² ]</p>
       <p class="formula num">IV(K) = IV<sub>atm</sub> × (1 − slope × ln(K/S))</p>
-      <p>The bracket is the market's volatility risk premium that day. Adding it once prices at-the-money S&amp;P 500 options at 0.88 × VIX and gives single stocks a small premium over their own realized volatility. A smile then makes lower strikes richer.</p>
-      <details class="help">
-        <summary>The details</summary>
-        <p>RV<sub>63</sub> is trailing 63-day realized volatility. The VIX is a variance-swap level that includes the skew, so at-the-money index volatility is taken as 0.88 × VIX. The index smile has slope 3.0 on both sides; single stocks get 1.25 below the money and a flat call wing, because out-of-the-money stock calls aren't cheap in real markets. Each smile is clipped to between 0.5 and 2 times at-the-money volatility; at-the-money volatility is floored at 75% of realized; every IV stays between 8% and 250%. You buy at the ask and sell at the bid: a half-spread of 2.5% of the premium, at least 0.05% of the stock price. The risk-free rate is the T-bill yield, and because prices include dividends, the stock is treated as paying none.</p>
-        <p>Three earlier versions were replaced after reality checks on real data: one made covered calls beat buy and hold on almost every stock; one let a 5%-out-of-the-money S&amp;P 500 covered call beat the index by 46 points; one made out-of-the-money stock calls so cheap that call buyers profited even after delta hedging. With this version, delta-hedged buyers of out-of-the-money stock options lose on average, as the evidence says they should, and the S&amp;P 500 buy-write finishes within about 5 points of the index (+83% vs +78%).</p>
+      <ul>
+      <li><strong>Inputs.</strong> RV<sub>63</sub> is the trailing 63-day <span class="term">realized volatility</span><span class="term-def"> (how much the price actually swung, measured from daily returns and put in yearly terms)</span>. K is the strike and S the stock price.</li>
+      <li><strong>The bracket</strong> is the market's <span class="term">volatility risk premium</span><span class="term-def"> (the extra that option buyers pay over the volatility that actually happens)</span> that day. The <span class="term">VIX</span><span class="term-def"> (an index of the volatility priced into S&amp;P 500 options for the next 30 days)</span> is a variance-swap level that includes the skew, so <span class="term">at-the-money</span><span class="term-def"> (with the strike at today's price)</span> index volatility is taken as 0.88 × VIX. Adding the bracket once prices at-the-money S&amp;P 500 options at 0.88 × VIX and gives single stocks a small premium over their own realized volatility.</li>
+      <li><strong>Smile.</strong> A <span class="term">smile</span><span class="term-def"> (how implied volatility changes from one strike to the next)</span> makes lower strikes richer. The index smile has slope 3.0 on both sides. Single stocks get 1.25 below the money and a flat call wing, because <span class="term">out-of-the-money</span><span class="term-def"> (would pay nothing if it expired today)</span> stock calls aren't cheap in real markets.</li>
+      <li><strong>Guard rails.</strong> Each smile is clipped to between 0.5 and 2 times at-the-money volatility. At-the-money volatility is floored at 75% of realized. Every IV stays between 8% and 250%.</li>
+      <li><strong>Bid and ask.</strong> You buy at the <span class="term">ask</span><span class="term-def"> (the price you pay to buy)</span> and sell at the <span class="term">bid</span><span class="term-def"> (the price you get to sell)</span>: a half-spread of 2.5% of the <span class="term">premium</span><span class="term-def"> (the option's price)</span>, at least 0.05% of the stock price.</li>
+      <li><strong>Rates and dividends.</strong> The risk-free rate is the T-bill yield. Prices include dividends, so the stock is treated as paying none.</li>
+      </ul>
+      <p><strong>Why this model.</strong> Three earlier versions were replaced after reality checks on real data. One made covered calls beat buy and hold on almost every stock. One let a 5%-out-of-the-money S&amp;P 500 covered call beat the index by 46 points. One made out-of-the-money stock calls so cheap that call buyers profited even after <span class="term">delta hedging</span><span class="term-def"> (offsetting an option's stock exposure with shares)</span>. With this version, delta-hedged buyers of out-of-the-money stock options lose on average, as the evidence says they should, and in our checks the S&amp;P 500 <span class="term">buy-write</span><span class="term-def"> (a covered call: own the index and write calls on it)</span> finished within about 5 points of the index.</p>
+      </div>
       </details>
+      <aside class="how-fact"><!-- Sources: F. Black and M. Scholes, "The Pricing of Options and Corporate Liabilities," Journal of
+             Political Economy 81(3): 637-654 (1973). R. C. Merton, "Theory of Rational Option Pricing," Bell
+             Journal of Economics and Management Science 4(1): 141-183 (1973). NobelPrize.org, press release
+             for the 1997 Prize in Economic Sciences (Merton and Scholes, "for a new method to determine the
+             value of derivatives"; it notes Black died in August 1995). -->
+      <p><span class="how-fact-label">Did you know?</span> Fischer Black and Myron Scholes published their formula in 1973. Scholes and Robert Merton won the 1997 Nobel Memorial Prize in Economic Sciences for it. Black had died in 1995.</p></aside>
+      </section>
 
+      <section class="how-topic">
       <h2 id="how-scoring">Scoring</h2>
+      <p class="how-short">You and six benchmarks are ranked on three numbers: <span class="term">Sharpe ratio</span><span class="term-def"> (return above T-bills for each unit of ups and downs)</span>, return per unit of <span class="term">drawdown</span><span class="term-def"> (a fall from the account's highest value so far)</span>, and <span class="term">IRR</span><span class="term-def"> (internal rate of return: your growth rate per year)</span>. Places go by the average rank.</p>
+      <details class="how-more">
+      <summary>How each score works</summary>
+      <div class="how-more-body">
       <ul>
-        <li><strong>Sharpe ratio.</strong> Mean daily return above the T-bill rate, divided by its standard deviation, × √252.</li>
-        <li><strong>Maximum drawdown.</strong> The largest fall from a peak in the daily account value.</li>
-        <li><strong>IRR.</strong> The money-weighted return per year (XIRR). With a fixed stake it equals the compound annual growth rate.</li>
-        <li><strong>Return per unit of drawdown.</strong> IRR above T-bills divided by max drawdown (floored at 1%).</li>
-        <li><strong>Overall place.</strong> Each strategy is ranked on Sharpe, return per unit of drawdown, and IRR, and ordered by the average rank; equal averages go to the higher Sharpe, then the higher IRR, and only exact ties share a place. Drawdown enters per unit of return, so a tiny position can't win just by being small. A wiped-out account ranks last.</li>
-        <li><strong>Also shown.</strong> Sortino ratio (excess return over downside deviation), volatility, and beta against the S&amp;P 500.</li>
+      <li><strong>Sharpe ratio.</strong> Mean daily return above the T-bill rate, divided by its <span class="term">standard deviation</span><span class="term-def"> (the typical size of swings around the average)</span>, × √252 to put it in yearly terms.</li>
+      <li><strong>Maximum drawdown.</strong> The largest fall from a peak in the daily account value.</li>
+      <li><strong>IRR.</strong> The money-weighted return per year (<span class="term">XIRR</span><span class="term-def"> (IRR using the exact date of each cash flow)</span>). With a fixed stake it equals the <span class="term">compound annual growth rate</span><span class="term-def"> (the steady yearly rate that turns the start value into the end value)</span>.</li>
+      <li><strong>Return per unit of drawdown.</strong> IRR above T-bills divided by max drawdown (floored at 1%).</li>
+      <li><strong>Overall place.</strong> Each strategy is ranked on Sharpe, return per unit of drawdown, and IRR, and ordered by the average rank. Equal averages go to the higher Sharpe, then the higher IRR, and only exact ties share a place. Drawdown enters per unit of return, so a tiny position can't win just by being small. A wiped-out account ranks last.</li>
+      <li><strong>Also shown.</strong> <span class="term">Sortino ratio</span><span class="term-def"> (like Sharpe, but counting only the downside swings)</span> (excess return over downside deviation), volatility, and <span class="term">beta</span><span class="term-def"> (how much the account moves with the S&amp;P 500; 1 means in step)</span> against the S&amp;P 500.</li>
       </ul>
+      <aside class="how-fact"><!-- Sources: W. F. Sharpe, "Mutual Fund Performance," Journal of Business 39(1, Part 2): 119-138
+               (1966), where it is the "reward-to-variability ratio"; W. F. Sharpe, "The Sharpe Ratio,"
+               Journal of Portfolio Management 21(1): 49-58 (1994), which recounts the 1966 origin.
+               NobelPrize.org, the 1990 Prize in Economic Sciences: Harry M. Markowitz, Merton H. Miller and
+               William F. Sharpe, "for their pioneering work in the theory of financial economics". -->
+      <p><span class="how-fact-label">Did you know?</span> William F. Sharpe introduced his ratio in 1966 as the “reward-to-variability” ratio. He shared the 1990 Nobel Memorial Prize in Economic Sciences with Harry Markowitz and Merton Miller.</p></aside>
+      </div>
+      </details>
+      <aside class="how-fact"><!-- Source: arithmetic. After a loss L, getting back to even needs a gain G with (1 - L)(1 + G) = 1,
+             so G = L / (1 - L): L = 50% gives G = 100%; L = 20% gives G = 25%. The same identity is how
+             site/engine/metrics.js:56-76 measures drawdown (1 - value / peak). -->
+      <p><span class="how-fact-label">Did you know?</span> Losses and gains aren't symmetric: a 50% loss needs a 100% gain to get back to even, and a 20% loss needs 25%.</p></aside>
+      </section>
 
+      <section class="how-topic">
       <h2 id="how-bench">Benchmarks</h2>
-      <p>Six strategies play the same window with the same costs: buy and hold the stock; buy and hold the S&amp;P 500; a covered call (long 100%, write 105% calls monthly); a protective put (long 100%, buy 95% puts monthly); a 200-day trend rule (long above the 200-day average, otherwise T-bills); and T-bills only.</p>
-
-      <h2 id="how-challenge">Head-to-head challenges</h2>
-      <p>After a game, <strong>Challenge a friend</strong> copies a link that holds your stock, your window and every order you placed, so no server or login is involved. Your friend plays the same blind tape from month 1 without seeing your result. When they finish, the engine replays your orders on the same prices and ranks you side by side, with the six benchmarks. They can challenge you back.</p>
-
-      <h2 id="how-data">Data and updates</h2>
-      <p>Daily dividend- and split-adjusted closes for every stock, the S&amp;P 500 ETF, the VIX and the 13-week T-bill yield are downloaded by a scheduled GitHub Actions job each weekday after the close. It validates every series and commits only real changes, and the site redeploys. The game window always ends at the latest close. Adding a stock is one line in <code>config/tickers.json</code>. See the <a href="#/data">Data</a> page for current status.</p>
-      <p>The engine has unit tests (Black-Scholes against textbook values and put-call parity, margin calls, settlement, the trading rules and every metric), and a separate pandas script recomputes every metric on real data and checks it against the game engine's own numbers.</p>
-
-      <h2 id="how-limits">Limits</h2>
+      <p class="how-short">Six simple strategies play the same window with the same costs: buy and hold the stock or the S&amp;P 500, a <span class="term">covered call</span><span class="term-def"> (own the stock and write calls on it: you collect premium but give up gains above the strike)</span>, a <span class="term">protective put</span><span class="term-def"> (own the stock and buy puts on it: insurance against a big fall)</span>, a 200-day trend rule and T-bills only.</p>
+      <details class="how-more">
+      <summary>The six strategies</summary>
+      <div class="how-more-body">
       <ul>
-        <li>Option prices are model prices, not historical quotes; the smile is a simple shape and earnings days aren't modeled.</li>
-        <li>Trades fill at the daily close, decisions are monthly, fractional shares are allowed, and market impact is ignored beyond the fixed costs.</li>
-        <li>Blind mode is honor-based: a careful look at the chart's shape or the T-bill rate can hint at the stock or era, the S&amp;P 500's steeper option smile (its out-of-the-money calls are cheaper) sets it apart from the stocks, the browser's developer tools can show the price file, and a challenge or replay link can be decoded to show the stock.</li>
-        <li>Replay links reproduce a game exactly on the same data. If the provider revises adjusted prices, a replay can differ by a few dollars.</li>
+      <li><strong>Buy and hold the stock.</strong> Buys 100% once and never trades again.</li>
+      <li><strong>Buy and hold the S&amp;P 500.</strong> The same, on the S&amp;P 500 <span class="term">ETF</span><span class="term-def"> (a fund that trades like a stock)</span>.</li>
+      <li><strong>Covered call.</strong> Long 100%, writes 105% calls every month.</li>
+      <li><strong>Protective put.</strong> Long 100%, buys 95% puts every month.</li>
+      <li><strong>200-day trend.</strong> Long 100% when the price is above its <span class="term">200-day average</span><span class="term-def"> (the average close of the last 200 trading days)</span>, otherwise in T-bills.</li>
+      <li><strong>T-bills only.</strong> All cash, earning the <span class="term">T-bill</span><span class="term-def"> (Treasury bill: short-term US government debt, the usual near-riskless return)</span> rate.</li>
       </ul>
+      <p>They run through the same engine as you, with the same rules and costs.</p>
+      </div>
+      </details>
+      <aside class="how-fact"><!-- Source: option payoff at expiry. Stock plus one written call at strike K is worth min(S_T, K)
+             plus the premium: S_T - max(S_T - K, 0) = min(S_T, K). See J. C. Hull, "Options, Futures, and
+             Other Derivatives", chapter "Trading Strategies Involving Options" (covered call payoff).
+             Engine check: the benchmark writes 105% calls on 100% of equity (site/engine/strategies.js:13-15)
+             and calls settle at intrinsic value (site/engine/game.js:267-272, options.js:42-44), so a 20%
+             month nets about +5% plus the premium, before interest and costs. -->
+      <p><span class="how-fact-label">Did you know?</span> A covered call trades upside for income. If the stock jumps 20% in a month, the covered-call benchmark gains only about 5% plus the premium, because it wrote calls at 105%.</p></aside>
+      </section>
+
+      <section class="how-topic">
+      <h2 id="how-challenge">Head-to-head challenges</h2>
+      <p class="how-short">After a game, <strong>Challenge a friend</strong> copies a link to your exact game. Your friend plays the same tape without seeing your result, and then you are ranked side by side.</p>
+      <details class="how-more">
+      <summary>How a challenge works</summary>
+      <div class="how-more-body">
+      <p>The link holds your stock, your window and every order you placed, so no server or login is involved. Your friend starts from month 1. When they finish, the engine replays your orders on the same prices and ranks you side by side, with the six benchmarks. They can challenge you back.</p>
+      </div>
+      </details>
+      </section>
+
+      <section class="how-topic">
+      <h2 id="how-data">Data and updates</h2>
+      <p class="how-short">Prices are real daily closes, refreshed automatically every weekday after the US market close. The game window always ends at the latest close.</p>
+      <details class="how-more">
+      <summary>Where the data comes from</summary>
+      <div class="how-more-body">
+      <p>A scheduled GitHub Actions job downloads daily closes for every stock and the S&amp;P 500 ETF (adjusted for dividends and splits), the VIX and the 13-week T-bill yield each weekday after the close. It validates every series and commits only real changes, and the site redeploys. Adding a stock is one entry in <code>config/tickers.json</code>. See the <a href="#/data">Data</a> page for current status.</p>
+      <p>The engine has unit tests (Black-Scholes against textbook values and put-call parity, margin calls, settlement, the trading rules and every metric), and a separate pandas script recomputes every metric on real data and checks it against the game engine's own numbers.</p>
+      </div>
+      </details>
+      </section>
+
+      <section class="how-topic">
+      <h2 id="how-limits">Limits</h2>
+      <ul class="how-short-list">
+      <li>Option prices come from a model, not historical quotes.</li>
+      <li>Trades fill at the daily close, and you decide once a month.</li>
+      <li>Blind mode is honor-based: there are ways to peek, and a challenge or replay link can be decoded to show the stock.</li>
+      <li>A replay can differ by a few dollars if the data provider revises adjusted prices.</li>
+      </ul>
+      <details class="how-more">
+      <summary>The fine print</summary>
+      <div class="how-more-body">
+      <ul>
+      <li><strong>Model prices.</strong> The smile is a simple shape, and earnings days aren't modeled.</li>
+      <li><strong>Simple fills.</strong> Fractional shares are allowed, and market impact is ignored beyond the fixed costs.</li>
+      <li><strong>Ways to peek.</strong> A careful look at the chart's shape or the T-bill rate can hint at the stock or era. The S&amp;P 500's steeper option smile (its out-of-the-money calls are cheaper) sets it apart from the stocks. The browser's developer tools can show the price file.</li>
+      <li><strong>Replays.</strong> Replay links reproduce a game exactly on the same data.</li>
+      </ul>
+      </div>
+      </details>
+      </section>
 
       <h2>About</h2>
       <p>Built for Duke's FMKT 256 (Fall 2026) AI extra-credit project with Claude (Anthropic) as the AI pair-programmer. Claude wrote the engine, tests, data pipeline and this site, and drafted its text; we chose the prompt, approved the game design, directed the work and reviewed it. Source: <a id="repoLink" href="https://github.com/cartermburke/FMKT256-AI-Proj">github.com/cartermburke/FMKT256-AI-Proj</a>.</p>

@@ -1223,6 +1223,61 @@ try {
     await c.close();
   });
 
+  await block(async () => {
+    // How it works reads in layers: summaries first with the detail folded (Quick tour), or
+    // everything open (Full detail); Explain terms adds short definitions; both are remembered.
+    // The numbers strip is built from the rules and the live data index.
+    const { c, p } = await fresh();
+    await p.goto(`http://127.0.0.1:${PORT}/#/how`);
+    await p.waitForSelector("#screen-how:not([hidden])");
+    await p.waitForFunction(() => /\d{4}/.test(document.querySelector("#howNumbers").textContent), null, { timeout: 4000 }).catch(() => {});
+    const view = () => p.evaluate(() => {
+      const folds = [...document.querySelectorAll("#screen-how details.how-more")];
+      const defs = [...document.querySelectorAll("#screen-how .term-def")];
+      return {
+        topics: document.querySelectorAll("#screen-how .how-topic").length,
+        shorts: [...document.querySelectorAll("#screen-how .how-topic > h2 + .how-short, #screen-how .how-topic > h2 + .how-short-list")].filter((e) => e.getClientRects().length).length,
+        open: folds.filter((d) => d.open).length, folds: folds.length,
+        defsShown: defs.filter((d) => d.getClientRects().length).length, defs: defs.length,
+        quick: document.querySelector('[data-how-depth="quick"]').getAttribute("aria-pressed"),
+        terms: document.querySelector("#howTerms").getAttribute("aria-pressed"),
+        facts: document.querySelectorAll("#screen-how .how-fact").length,
+        numbers: document.querySelector("#howNumbers").textContent,
+        words: document.querySelector("#screen-how").innerText.split(/\s+/).filter(Boolean).length,
+      };
+    });
+    const q = await view();
+    const asOf = await p.evaluate(async () => (await (await fetch("data/meta.json")).json()).as_of);
+    const asOfText = new Date(`${asOf}T12:00:00Z`).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" });
+    check(q.topics === 8 && q.shorts === 8 && q.folds >= 8 && q.open === 0 && q.defsShown === 0 && q.quick === "true" && q.terms === "false", `How it works opens as a quick tour: 8 summaries, every fold closed, no definitions (${q.open}/${q.folds} open, ${q.words} words)`);
+    check(q.numbers.includes("$100,000") && q.numbers.includes("60 months") && q.numbers.includes(asOfText) && q.facts >= 3, `the numbers strip shows the rules and the live data date (${asOfText}), with "Did you know?" facts (${q.facts})`);
+    await p.click('[data-how-depth="full"]');
+    await p.click("#howTerms");
+    const f = await view();
+    check(f.open === f.folds && f.defsShown === f.defs && f.defs >= 20 && f.words > q.words + 400, `Full detail opens every fold and Explain terms shows ${f.defsShown} definitions (${f.words} words)`);
+    await p.locator("#screen-how details.how-more > summary").first().click();
+    check((await view()).open === f.folds - 1, "a single fold still closes on its own in Full detail");
+    await p.reload();
+    await p.waitForSelector("#screen-how:not([hidden])");
+    const r = await view();
+    check(r.open === r.folds && r.defsShown === r.defs && r.quick === "false" && r.terms === "true", "the reading view and Explain terms are remembered after a reload");
+    const dash = await p.evaluate(() => /\u2014/.test(document.querySelector("#screen-how").innerText));
+    check(!dash, "How it works has no em dashes");
+    await c.close();
+    // On a phone, with everything open, nothing scrolls sideways and the controls are 44px.
+    const m = await fresh({ viewport: { width: 320, height: 640 }, isMobile: true, hasTouch: true });
+    await m.p.goto(`http://127.0.0.1:${PORT}/#/how`);
+    await m.p.waitForSelector("#screen-how:not([hidden])");
+    await m.p.click('[data-how-depth="full"]');
+    await m.p.click("#howTerms");
+    const ph = await m.p.evaluate(() => ({
+      over: document.documentElement.scrollWidth - innerWidth,
+      small: [...document.querySelectorAll("#screen-how [data-how-depth], #howTerms, #screen-how details.how-more > summary")].filter((b) => b.getBoundingClientRect().height < 44).length,
+    }));
+    check(ph.over <= 0 && ph.small === 0, `How it works on a 320px phone: no sideways scroll (${ph.over}px) and 44px controls (${ph.small} smaller)`);
+    await m.c.close();
+  });
+
   // How it works + data pages.
   await page.goto(`http://127.0.0.1:${PORT}/#/data`);
   await page.waitForSelector("#dataTable tbody tr");

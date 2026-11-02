@@ -2,7 +2,8 @@
 // only renders it. Engine copy (coach notes, order errors, strategy names) is shown verbatim.
 import { buildMarket, firstUsableIndex } from "./engine/market.js";
 import { Game, RULES, normalizeAction, legalize } from "./engine/game.js";
-import { rankStrategies } from "./engine/scoring.js";
+import { rankStrategies, RANK_METRICS } from "./engine/scoring.js";
+import { SPREAD } from "./engine/options.js";
 import { STRATEGIES, runBenchmarks } from "./engine/strategies.js";
 import { debrief } from "./engine/coach.js";
 import { encodeReplay, decodeReplay } from "./engine/replay.js";
@@ -60,6 +61,7 @@ async function init() {
     document.documentElement.style.setProperty("--ab-h", `${Math.ceil($("actionBar").getBoundingClientRect().height)}px`);
   }).observe($("actionBar"));
   await null; // the routing state below this function in the module is set up first
+  initHow(); // the reader's view of How it works, set before any route can show it
   // Mark the entry this page loaded on: what is behind it isn't this page's, so a No to a
   // challenge there goes home instead of stepping back.
   history.replaceState({ ...history.state, landing: true }, "");
@@ -70,10 +72,12 @@ async function init() {
     console.error(e);
     $("bootMsg").textContent = "Couldn't load the market data. Check your connection and try again.";
     $("bootRetry").hidden = false;
+    renderHowNumbers(true);
     return;
   }
   renderHomeMeta();
   renderDataPage();
+  renderHowNumbers();
   route();
 }
 
@@ -1495,6 +1499,80 @@ function validateReplayCfg(cfg, actions, kind = "replay") {
   if (!Array.isArray(actions) || actions.length > cfg.turns) bad("bad action list");
   if (cfg.by !== undefined && (typeof cfg.by !== "string" || cfg.by.length > 20)) bad("bad name");
   cfg.blind = !!cfg.blind;
+}
+
+// ------------------------------------------------------------------ how it works
+
+// The reader's choices on How it works, kept in this browser: how much detail is open, and
+// whether short definitions of the jargon show inline. initHow() runs before the first route,
+// so the page is never shown in one state and then switched to another.
+const HOW_DEPTH_KEY = "bt-how-depth"; // "quick" (summaries, folds closed) or "full" (folds open)
+const HOW_TERMS_KEY = "bt-how-terms"; // "on" or "off"
+const QUICK_TURNS = 12; // a quick round's months, as startNewGame() plays it
+
+function initHow() {
+  setHowDepth(load(HOW_DEPTH_KEY) === "full" ? "full" : "quick");
+  setHowTerms(load(HOW_TERMS_KEY) === "on");
+  for (const b of document.querySelectorAll("[data-how-depth]")) {
+    b.addEventListener("click", () => {
+      const depth = b.dataset.howDepth;
+      setHowDepth(depth); // pressing the current choice again re-folds (or re-opens) every section
+      store(HOW_DEPTH_KEY, depth);
+      howSay(depth === "full" ? "Full detail: every section is open." : "Quick tour: summaries only. Open any section for more.");
+    });
+  }
+  $("howTerms").addEventListener("click", () => {
+    const on = $("howTerms").getAttribute("aria-pressed") !== "true";
+    setHowTerms(on);
+    store(HOW_TERMS_KEY, on ? "on" : "off");
+    howSay(on ? "Term definitions are shown." : "Term definitions are hidden.");
+  });
+  renderHowNumbers();
+}
+
+/** Quick closes every fold, Full opens every one; the reader can still toggle each after. */
+function setHowDepth(depth) {
+  $("screen-how").dataset.depth = depth;
+  for (const b of document.querySelectorAll("[data-how-depth]")) b.setAttribute("aria-pressed", String(b.dataset.howDepth === depth));
+  for (const d of document.querySelectorAll("#screen-how details.how-more")) d.open = depth === "full";
+}
+
+function setHowTerms(on) {
+  $("screen-how").dataset.terms = on ? "on" : "off";
+  $("howTerms").setAttribute("aria-pressed", String(on));
+}
+
+/** Say a change politely. The same words twice in a row get a trailing space so they are read again. */
+function howSay(text) {
+  const n = $("howViewMsg");
+  n.textContent = n.textContent === text ? `${text}\u00a0` : text;
+}
+
+/**
+ * By the numbers: every value comes from the engine's constants, or from the data index once it
+ * is in (failed: it couldn't be loaded). The tiles keep their size, so filling in the date later
+ * doesn't move the page under a reader.
+ */
+function renderHowNumbers(failed = false) {
+  const m = S.meta;
+  const R = RULES;
+  const months = ((m && m.game_years) || 5) * 12; // as startNewGame() counts a full challenge
+  const k = R.strikes;
+  const judged = RANK_METRICS.map((x) => x.label.replace("Return/", "return per ")).join(", ");
+  const stats = [
+    ["Starting stake", money(R.stake), "No deposits or withdrawals"],
+    ["Full challenge", `${months} months`, `Or a ${QUICK_TURNS}-month quick round`],
+    ["Each turn", `${R.turnDays} days`, "Trading days, valued at every close"],
+    ["Strikes", `${k.length}`, `${k[0]}% to ${k[k.length - 1]}% of the price, up to ${R.maxLegs} options a month`],
+    ["Net exposure", `−${R.maxShort * 100}% to +${R.maxLong * 100}%`, "Stock plus option delta"],
+    ["Stock trade cost", `${R.stockCostBps / 100}%`, `Options cross a ${SPREAD.halfPct * 100}% half-spread`],
+    ["Benchmarks", `${Object.keys(STRATEGIES).length + 1}`, "Same prices, same costs"], // + the S&P 500's buy and hold
+    ["Judged on", `${RANK_METRICS.length} metrics`, judged],
+    ["Data through", m ? fmtDate(m.as_of) : "–",
+      m ? `${Object.keys(m.series).length} series, refreshed every weekday` : failed ? "The market data didn't load" : "Loading market data"],
+  ];
+  $("howNumbers").innerHTML = stats.map(([label, value, sub]) =>
+    `<div class="how-stat"><dt>${label}</dt><dd class="how-stat-value num">${value}</dd><dd class="how-stat-sub">${sub}</dd></div>`).join("");
 }
 
 // ------------------------------------------------------------------ data page

@@ -503,6 +503,63 @@ details.block > summary { cursor: pointer; min-height: 36px; display: flex; alig
 /* Arrows between steps: right in a row, down when stacked. */
 .turn-steps li + li::before { content: ""; position: absolute; left: -21px; top: 50%; width: 10px; height: 10px; margin-top: -5px; border-top: 2px solid var(--ink-2); border-right: 2px solid var(--ink-2); transform: rotate(45deg); }
 .turn-diagram figcaption { margin-top: 8px; font-size: 13.5px; color: var(--muted); }
+/* How it works, reading view: a summary first, the detail folded under it, a strip of numbers
+   and a few facts. Only existing tokens. */
+.how-bar { margin-top: 18px; display: flex; flex-direction: column; gap: 12px; }
+.how-bar .toc { margin-top: 0; }
+.how-view { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; }
+.how-view-label { font-size: 13px; font-weight: 600; color: var(--muted); }
+.how-seg { display: inline-flex; gap: 2px; padding: 3px; border: 1px solid var(--control); border-radius: 11px; background: var(--surface); }
+.how-seg button {
+  border: 0; border-radius: 8px; background: transparent; color: var(--ink-2); cursor: pointer;
+  font-size: 14px; font-weight: 600; padding: 6px 14px; min-height: 36px;
+}
+.how-seg button:hover { background: var(--surface-2); color: var(--ink); }
+.how-seg button[aria-pressed="true"] { background: var(--ink); color: var(--surface); }
+.how-switch { display: inline-flex; align-items: center; gap: 10px; min-height: 36px; padding: 0 4px 0 0; border: 0; border-radius: 8px; background: none; color: var(--ink); font-size: 14px; font-weight: 600; cursor: pointer; }
+.how-switch[aria-pressed="true"] .switch-track { background: var(--ink); }
+.how-switch[aria-pressed="true"] .switch-track::after { transform: translateX(18px); }
+
+.prose .how-numbers h2 { margin-top: 28px; }
+.how-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1px; margin: 0; background: var(--line); border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; }
+.how-stat { background: var(--surface); padding: 12px 14px; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.how-stat dt { font-size: 12.5px; color: var(--muted); }
+.how-stat dd { margin: 0; }
+.how-stat-value { font-size: 22px; font-weight: 600; line-height: 1.2; color: var(--ink); text-wrap: balance; }
+.how-stat-sub { font-size: 12.5px; color: var(--muted); line-height: 1.35; }
+
+.how-topic { margin-top: 30px; border-top: 1px solid var(--line); }
+.prose .how-topic h2 { margin: 22px 0 8px; }
+.prose .how-topic + h2 { margin-top: 30px; padding-top: 22px; border-top: 1px solid var(--line); } /* About */
+.prose .how-short { color: var(--ink); font-size: 16px; line-height: 1.55; max-width: 64ch; }
+.prose .how-short-list { padding-left: 20px; margin: 0; }
+.prose .how-short-list li { color: var(--ink); font-size: 16px; line-height: 1.5; margin: 4px 0; }
+.how-topic .turn-diagram { margin-top: 14px; }
+details.how-more { margin-top: 8px; }
+details.how-more > summary {
+  list-style: none; cursor: pointer; display: inline-flex; align-items: center; gap: 8px;
+  min-height: 36px; color: var(--you); font-size: 14px; font-weight: 600; border-radius: 6px;
+}
+details.how-more > summary::-webkit-details-marker { display: none; }
+details.how-more > summary::after {
+  content: ""; flex: none; width: 7px; height: 7px; margin-top: -3px;
+  border-right: 2px solid currentColor; border-bottom: 2px solid currentColor; transform: rotate(45deg);
+}
+details.how-more[open] > summary::after { transform: rotate(-135deg); margin-top: 4px; }
+details.how-more > summary:hover { text-decoration: underline; text-underline-offset: 3px; }
+.how-more-body { margin: 2px 0 0 3px; padding: 2px 0 2px 16px; border-left: 2px solid var(--line-strong); }
+.how-more-body > :first-child { margin-top: 0; }
+.how-more-body > :last-child { margin-bottom: 0; }
+.prose .how-more h3 { font-size: 15px; font-weight: 600; margin: 16px 0 6px; color: var(--ink); }
+.prose .how-more h3 + p { margin-top: 0; }
+.how-fact { margin-top: 14px; padding: 10px 14px; border-radius: 9px; background: var(--surface-2); }
+.prose .how-fact p { font-size: 14px; color: var(--ink-2); }
+.how-fact-label { display: block; font-size: 12.5px; font-weight: 700; color: var(--ink); margin-bottom: 2px; }
+/* Explain terms: short plain definitions after the jargon, only when the reader asks for them. */
+#screen-how .term-def { display: none; }
+#screen-how[data-terms="on"] .term-def { display: inline; color: var(--muted); font-size: 0.93em; }
+#screen-how[data-terms="on"] .term { text-decoration: underline dotted var(--control); text-decoration-thickness: 1.5px; text-underline-offset: 3px; }
+
 .status-ok, .status-stale { font-weight: 600; display: inline-flex; align-items: center; gap: 4px; }
 .status-ok { color: var(--gain); } .status-stale { color: var(--loss); }
 
@@ -581,6 +638,11 @@ details.block > summary { cursor: pointer; min-height: 36px; display: flex; alig
   .challenge-group { flex-basis: 100%; }
   .challenge-group input { flex: 1; width: auto; min-width: 0; }
   .challenge-group .btn-primary { flex: none; }
+  .how-seg button, .how-switch, details.how-more > summary { min-height: 44px; }
+  .how-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .how-stat { padding: 10px 12px; }
+  .how-stat:last-child:nth-child(odd) { grid-column: 1 / -1; }
+  .how-stat-value { font-size: 19px; }
 }
 @media (max-width: 440px) {
   .score .xs-hide { display: none; }
@@ -608,6 +670,7 @@ details.block > summary { cursor: pointer; min-height: 36px; display: flex; alig
   .slider-wrap::after { top: 12px; bottom: 12px; }
   .quick-btns button, .legs li button, select, input[type="text"], .quotes button.px { min-height: 44px; }
   .legs li button { width: 44px; }
+  .how-seg button, .how-switch, details.how-more > summary { min-height: 44px; }
 }
 /* Short screens (a laptop zoomed in): the top bar scrolls away instead of taking the room. */
 @media (max-height: 500px) {
@@ -623,5 +686,10 @@ details.block > summary { cursor: pointer; min-height: 36px; display: flex; alig
   .switch-track::after { top: 2px; left: 2px; background: CanvasText; }
   .switch input:checked + .switch-track { background: Highlight; border-color: Highlight; }
   .switch input:checked + .switch-track::after { background: HighlightText; }
+  .how-seg button[aria-pressed="true"] { background: Highlight; color: HighlightText; }
+  .how-switch[aria-pressed="true"] .switch-track { background: Highlight; border-color: Highlight; }
+  .how-switch[aria-pressed="true"] .switch-track::after { background: HighlightText; }
+  .how-stats { gap: 0; }
+  .how-stat { border: 1px solid CanvasText; }
 }
 .data-links { margin-top: 12px; line-height: 1.9; }
