@@ -285,13 +285,16 @@ function markNav(screen) {
 // so a saved game is never restored twice.
 let routeSeq = 0;
 let routeChain = Promise.resolve();
-function route() {
+function route(e) {
   const seq = ++routeSeq;
-  routeChain = routeChain.then(() => routeNow(seq)).catch((e) => fatal(e));
+  // The hash this navigation left (a hashchange says): a challenge link opened from the game
+  // steps back only onto that game's own #/play.
+  const from = e && e.oldURL ? new URL(e.oldURL).hash : null;
+  routeChain = routeChain.then(() => routeNow(seq, from)).catch((err) => fatal(err));
   return routeChain;
 }
 
-async function routeNow(seq) {
+async function routeNow(seq, from = null) {
   const h = location.hash || "#/";
   if (!S.meta) {
     // Still loading the data index, or it failed: How it works opens anyway; anything else
@@ -309,7 +312,7 @@ async function routeNow(seq) {
     return;
   }
   if (h.startsWith("#/challenge/")) {
-    await openChallenge(h.slice("#/challenge/".length), seq);
+    await openChallenge(h.slice("#/challenge/".length), seq, from);
     return;
   }
   await loadHomeGame(!["#/play", "#/results", "#/how", "#/data"].includes(h));
@@ -1378,11 +1381,15 @@ async function attachChallenger(code) {
   S.challengeCode = code;
 }
 
-async function openChallenge(code, seq = routeSeq) {
+async function openChallenge(code, seq = routeSeq, from = null) {
   // Opened from the game screen, the entry behind the link is that game's #/play: step back
   // onto it, so history never holds two #/play entries in a row (the first Back would do nothing).
   // Never on the entry the tab opened on: what is behind it isn't this page's.
   const fromGame = S.screen === "game" && !history.state?.landing;
+  // After opening, step back only from a link just opened (no state yet) on top of the game's
+  // #/play. Reached by Back or Forward, or pasted behind another link still loading, the entry
+  // behind it is something else, which would then be routed (and could reopen another link).
+  const stepBack = fromGame && !history.state && from === "#/play";
   // Back to the link of the challenge being played (it stays in history when the player moved
   // on while it loaded) carries on with that game instead of starting it again. A finished one
   // only does so from that leftover entry: opening its link again starts a new attempt.
@@ -1395,6 +1402,7 @@ async function openChallenge(code, seq = routeSeq) {
   // Only one game is kept, so ask before a challenge replaces a game in progress (a damaged
   // link replaces nothing, so it goes straight to its error). On a No, go back to where the
   // player was, or show home with its Resume card.
+  if (seq !== routeSeq) return; // a newer route is queued: it reads this same hash and asks once
   let linkOk = true;
   try {
     const r = decodeLink(code, "challenge");
@@ -1424,7 +1432,7 @@ async function openChallenge(code, seq = routeSeq) {
     saveGame();
     if (seq !== routeSeq) return; // the player has already moved on; the challenge is kept for Resume
     history.replaceState(null, "", "#/play");
-    if (fromGame) history.back();
+    if (stepBack) history.back();
     show("game");
     renderGame(true);
   } catch (e) {

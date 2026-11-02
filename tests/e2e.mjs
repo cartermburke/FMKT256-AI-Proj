@@ -1053,6 +1053,9 @@ try {
     // returns to the game with no more questions.
     const f = await fresh();
     await f.p.goto(`http://127.0.0.1:${PORT}/#/`);
+    // Not KO: a random draw of KO would load (and cache) its prices, so the failure never happens.
+    await f.p.click(".options-panel summary");
+    await f.p.selectOption("#optTicker", "NVDA");
     await f.p.click("#startQuick");
     await f.p.waitForSelector("#priceChart canvas");
     await playMonths(f.p, 1);
@@ -1074,6 +1077,72 @@ try {
     const fwd = await f.p.evaluate(() => ({ hash: location.hash, turn: document.querySelector("#sTurn")?.textContent || "", game: !document.querySelector("#screen-game").hidden }));
     check(back === "#/" && fwd.hash === "#/play" && fwd.game && fwd.turn.startsWith("2 of 12") && dialogs.length === before + 1, `No on a challenge reached by Back shows home, and Forward returns to the game (${back} -> ${fwd.hash} ${fwd.turn}, ${dialogs.length - before} question)`);
     await f.c.close();
+  });
+  await block(async () => {
+    // Yes on a failed challenge reached by Back from the game opens that challenge's game (the
+    // entry behind it isn't this game's #/play, so no step back onto it).
+    const slowly = (pg, sym, ms) => pg.route(`**/data/prices/${sym}.json`, async (r) => { await new Promise((z) => setTimeout(z, ms)); r.continue(); });
+    const ko = linkOf({ v: 1, sym: "KO", end: "2026-10-30", fullTurns: 60, startTurn: 0, turns: 12, blind: true, seed: 1, mode: "quick", by: "Pat" }, Array(12).fill([100, ""]));
+    const xom = linkOf({ v: 1, sym: "XOM", end: "2026-10-30", fullTurns: 60, startTurn: 3, turns: 12, blind: false, seed: 2, mode: "quick", by: "Sam" }, Array(12).fill([100, ""]));
+    const savedChallenge = (pg) => pg.evaluate(() => { try { return JSON.parse(localStorage.getItem(Object.keys(localStorage).find((k) => k !== "bt-theme"))).challenge; } catch { return null; } });
+    const g = await fresh();
+    await g.p.goto(`http://127.0.0.1:${PORT}/#/`);
+    await g.p.click(".options-panel summary");
+    await g.p.selectOption("#optTicker", "NVDA");
+    await g.p.click("#startQuick");
+    await g.p.waitForSelector("#priceChart canvas");
+    await playMonths(g.p, 1);
+    await g.p.click(".brand");
+    await g.p.waitForSelector("#resumeCard:not([hidden])");
+    let once = 0;
+    await g.p.route("**/data/prices/KO.json", (r) => (once++ ? r.continue() : r.fulfill({ status: 503, body: "" })));
+    await g.p.goto(`http://127.0.0.1:${PORT}/#/challenge/${ko}`);
+    await g.p.waitForFunction(() => document.querySelector("#staleBanner").textContent.length > 0, null, { timeout: 4000 }).catch(() => {});
+    await g.p.click("#resumeBtn");
+    await g.p.waitForSelector("#screen-game:not([hidden])");
+    await g.p.goBack();
+    await g.p.waitForTimeout(1500);
+    const yes = await g.p.evaluate(() => ({ hash: location.hash, game: !document.querySelector("#screen-game").hidden, turn: document.querySelector("#sTurn").textContent }));
+    check(yes.hash === "#/play" && yes.game && yes.turn.startsWith("1 of 12") && (await savedChallenge(g.p)) === ko, `Yes on a failed challenge reached by Back opens its game (${yes.hash}, ${yes.game ? "game" : "not the game"} ${yes.turn})`);
+    await g.c.close();
+    // A second challenge link pasted while the first still loads opens, and stays open: the
+    // first link's entry behind it isn't routed again.
+    const h = await fresh();
+    await h.p.goto(`http://127.0.0.1:${PORT}/#/`);
+    await h.p.click(".options-panel summary");
+    await h.p.selectOption("#optTicker", "NVDA");
+    await h.p.click("#startQuick");
+    await h.p.waitForSelector("#priceChart canvas");
+    await playMonths(h.p, 1);
+    await slowly(h.p, "KO", 1500);
+    await h.p.evaluate((x) => { location.hash = x; }, `#/challenge/${ko}`);
+    await h.p.waitForTimeout(300);
+    await h.p.evaluate((x) => { location.hash = x; }, `#/challenge/${xom}`);
+    await h.p.waitForTimeout(3500);
+    const last = await h.p.evaluate(() => ({ hash: location.hash, title: document.querySelector("#priceTitle").textContent }));
+    check(last.hash === "#/play" && last.title.includes("XOM") && (await savedChallenge(h.p)) === xom, `the last challenge link pasted while another loads is the one that opens (${last.title})`);
+    await h.c.close();
+    // Two challenge links pasted while a replay loads: each is asked about once.
+    const r = await fresh();
+    await r.p.goto(`http://127.0.0.1:${PORT}/#/`);
+    await r.p.click(".options-panel summary");
+    await r.p.selectOption("#optTicker", "NVDA");
+    await r.p.click("#startQuick");
+    await r.p.waitForSelector("#priceChart canvas");
+    await playMonths(r.p, 1);
+    await slowly(r.p, "TSLA", 2000);
+    const rep = linkOf({ v: 1, sym: "TSLA", end: "2026-10-30", fullTurns: 60, startTurn: 2, turns: 12, blind: false, seed: 4, mode: "quick" }, Array(12).fill([100, ""]));
+    const asked = dialogs.length;
+    await r.p.evaluate((x) => { location.hash = x; }, `#/replay/${rep}`);
+    await r.p.waitForTimeout(300);
+    // Every question here is answered No (page.answer otherwise covers one question only).
+    Object.defineProperty(r.p, "answer", { get: () => false, set: () => {} });
+    await r.p.evaluate((x) => { location.hash = x; }, `#/challenge/${xom}`);
+    await r.p.waitForTimeout(100);
+    await r.p.evaluate((x) => { location.hash = x; }, `#/challenge/${ko}`);
+    await r.p.waitForTimeout(4500);
+    check(dialogs.length - asked === 2, `two challenge links pasted while a replay loads are asked about once each (${dialogs.length - asked} questions)`);
+    await r.c.close();
   });
   await block(async () => {
     // Once another tab has saved over this one's game, the game at stake is the saved one.
