@@ -261,6 +261,8 @@ def main() -> int:
         "failures": failures,
         "series": series_meta,
         "pool": [t["symbol"] for t in cfg["pool"]],
+        "pool_info": [{"symbol": t["symbol"], "name": t.get("name", t["symbol"]),
+                       "regime": t.get("regime", "")} for t in cfg["pool"]],
         "benchmark": cfg.get("benchmark"),
         "game_years": cfg.get("game_years", 5),
         "repo": os.environ.get("GITHUB_REPOSITORY"),
@@ -268,7 +270,7 @@ def main() -> int:
                     f"/actions/runs/{os.environ['GITHUB_RUN_ID']}"
                     if os.environ.get("GITHUB_RUN_ID") else None),
     }
-    material = {k: meta[k] for k in ("as_of", "stale", "failures", "series", "pool")}
+    material = {k: meta[k] for k in ("as_of", "stale", "failures", "series", "pool", "pool_info")}
     old_material = {k: old_meta.get(k) for k in material}
     if changed or material != old_material:
         meta["updated_at"] = dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
