@@ -120,8 +120,8 @@ function syncThemeButton() {
   const dark = currentTheme() === "dark";
   const b = $("themeToggle");
   b.setAttribute("aria-pressed", String(dark));
-  b.setAttribute("aria-label", dark ? "Switch to light theme" : "Switch to dark theme");
-  b.title = b.getAttribute("aria-label");
+  b.setAttribute("aria-label", "Dark theme");
+  b.title = dark ? "Dark theme is on" : "Dark theme is off";
 }
 
 function initTheme() {
@@ -161,7 +161,9 @@ async function route() {
     await openChallenge(h.slice("#/challenge/".length));
     return;
   }
-  if ((h === "#/play" || h === "#/results") && !S.game) await restoreSave();
+  // Leaving a replay drops it, so the game in progress (kept in storage) comes back.
+  if (S.replay) { S.game = null; S.replay = false; }
+  if (!S.game) await restoreSave();
   if (h === "#/play" && S.game && !S.game.over) { show("game"); renderGame(true); return; }
   if (h === "#/play" && S.game && S.game.over) { location.hash = "#/results"; return; }
   if (h === "#/results" && S.game && S.game.over) { show("results"); renderResults(); return; }
@@ -320,6 +322,8 @@ async function setupGame(cfg) {
   for (const k of Object.keys(S.charts)) { S.charts[k].destroy(); delete S.charts[k]; }
   document.querySelector(".autopilot").open = false;
   $("errors").dataset.last = "";
+  $("errors").innerHTML = "";
+  resetCeremony();
 }
 
 // ------------------------------------------------------------------ game screen
@@ -568,7 +572,15 @@ function updateTicket() {
     rm.type = "button";
     rm.setAttribute("aria-label", `Remove: ${what}`);
     rm.textContent = "×";
-    rm.addEventListener("click", () => { S.legs.splice(i, 1); S.legNote = ""; updateTicket(); });
+    rm.addEventListener("click", () => {
+      S.legs.splice(i, 1);
+      S.legNote = "";
+      updateTicket();
+      // The list was rebuilt, so put focus somewhere sensible instead of letting it fall to the page
+      // (where Enter would advance the month).
+      const left = $("legsList").querySelectorAll("li button");
+      (left[i] || left[i - 1] || $("addLeg")).focus();
+    });
     const span = document.createElement("span");
     span.innerHTML = `${what}${prem ? ` <span class="leg-prem">· ${prem}</span>` : ""}`;
     li.appendChild(rm);
@@ -610,7 +622,7 @@ function updateTicket() {
   go.disabled = !chk.ok || !!S.busy;
   const last = g.turn + 1 >= g.turns;
   go.textContent = !chk.ok ? "Fix the order to continue"
-    : last ? (isHold() ? "Hold and reveal the stock" : "Trade and reveal the stock")
+    : last ? (S.cfg.blind ? (isHold() ? "Hold and reveal the stock" : "Trade and reveal the stock") : (isHold() ? "Hold and see results" : "Trade and see results"))
       : isHold() ? `Hold, go to month ${g.turn + 2}` : `Trade and go to month ${g.turn + 2}`;
 }
 
@@ -688,7 +700,19 @@ function endCeremony() {
   if (!S.revealDates) { S.revealDates = true; S.charts.reveal?.rebuild(); }
 }
 
+/** Stop any reveal in progress and clear its timers (used between games). */
+function resetCeremony() {
+  clearTimeout(S.ceremonyTimer);
+  clearTimeout(S.ceremonyDates);
+  S.ceremonyOn = false;
+  S.revealDates = true;
+  $("screen-results").classList.remove("ceremony");
+  $("revealSkip").hidden = true;
+}
+
 function startCeremony() {
+  clearTimeout(S.ceremonyTimer);
+  clearTimeout(S.ceremonyDates);
   S.ceremonyOn = true;
   S.revealDates = false;
   $("screen-results").classList.add("ceremony");

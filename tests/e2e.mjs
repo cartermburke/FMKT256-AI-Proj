@@ -262,9 +262,14 @@ try {
   await pmo.waitForSelector("#priceChart canvas");
   await pmo.click(".autopilot summary");
   await pmo.click("#autoRun");
-  await pmo.waitForSelector("#screen-results.ceremony");
-  check(/^It was .+\(.+\)$/.test(await pmo.textContent("#revealTitle")), "reveal title is final while the ceremony runs");
-  await pmo.click("#revealSkip");
+  // Read the title and press Skip in the same frame the ceremony is first seen, so a slow runner can't miss it.
+  const during = await pmo.waitForFunction(() => {
+    if (!document.querySelector("#screen-results").classList.contains("ceremony")) return false;
+    const t = document.querySelector("#revealTitle").textContent;
+    document.querySelector("#revealSkip").click();
+    return t;
+  }, null, { timeout: 10000 }).then((h) => h.jsonValue()).catch(() => "");
+  check(/^It was .+\(.+\)$/.test(during), "reveal title is final while the ceremony runs");
   check(!(await pmo.evaluate(() => document.querySelector("#screen-results").classList.contains("ceremony"))) && (await pmo.isHidden("#revealSkip")), "the ceremony can be skipped");
   await motion.close();
 

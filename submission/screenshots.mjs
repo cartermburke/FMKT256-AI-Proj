@@ -36,6 +36,7 @@ try {
   }
   await page.click('.quick-btns button[data-x="100"]');
   await page.locator("#quotesTable tbody tr").nth(3).locator("button.px").nth(0).click();
+  await page.waitForFunction(() => !document.querySelector("#nextTurn").disabled);
   await page.evaluate(() => window.scrollTo(0, 0));
   await page.mouse.move(420, 300);
   await page.screenshot({ path: OUT + "game.png", fullPage: false });
