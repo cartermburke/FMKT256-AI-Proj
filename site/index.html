@@ -402,11 +402,11 @@
       <p class="lede" id="dataLede">Loading</p>
       <div class="table-wrap">
         <table class="score" id="dataTable">
-          <thead><tr><th scope="col">Series</th><th scope="col">Source</th><th class="num" scope="col">Rows</th><th scope="col">First</th><th scope="col">Last</th><th scope="col">Status</th></tr></thead>
+          <thead><tr><th scope="col">Series</th><th scope="col">Source</th><th class="num" scope="col">Rows</th><th class="num" scope="col">First close</th><th class="num" scope="col">Last close</th><th scope="col">Status</th></tr></thead>
           <tbody></tbody>
         </table>
       </div>
-      <p id="dataLinks" class="small"></p>
+      <p id="dataLinks" class="small data-links"></p>
       <h2>How updates work</h2>
       <p>A GitHub Actions workflow (<code>.github/workflows/update-data.yml</code>) runs every weekday at 22:30 UTC (4:30pm CST), when the config changes, or on demand. It tries yfinance, then the Yahoo Finance chart API, then Nasdaq's historical API (and FRED for T-bills), validates every series, and commits only changed files; the site redeploys from that commit. If a source fails, the last good data is kept and this page flags it as stale.</p>
     </section>

@@ -137,10 +137,12 @@ function drawMarks(u, spec) {
     ctx.font = `${11 * pr}px ${cssVar("--font") || "system-ui"}`;
     ctx.textBaseline = "top";
     const tw = ctx.measureText(v.label).width;
+    // Label to the right of the rule, or to its left when it would run off the plot.
+    const lx = x + 4 * pr + tw > u.bbox.left + u.bbox.width ? x - 4 * pr - tw : x + 4 * pr;
     ctx.fillStyle = cssVar("--surface");
-    ctx.fillRect(x + 2 * pr, u.bbox.top, tw + 5 * pr, 15 * pr);
+    ctx.fillRect(lx - 2 * pr, u.bbox.top, tw + 4 * pr, 15 * pr);
     ctx.fillStyle = cssVar("--muted");
-    ctx.fillText(v.label, x + 4 * pr, u.bbox.top + 2 * pr);
+    ctx.fillText(v.label, lx, u.bbox.top + 2 * pr);
   }
   for (const m of spec.marks || []) {
     const x = u.valToPos(m.x, "x", true);

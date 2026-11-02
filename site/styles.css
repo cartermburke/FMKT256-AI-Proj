@@ -524,3 +524,4 @@ details.block > summary { cursor: pointer; min-height: 36px; display: flex; alig
 @media (forced-colors: active) {
   .redact-bar, .tape-redact, .is-blind .title-redact::after { background: CanvasText; }
 }
+.data-links { margin-top: 12px; line-height: 1.9; }
