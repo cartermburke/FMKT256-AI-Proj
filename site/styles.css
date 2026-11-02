@@ -405,6 +405,8 @@ table { border-collapse: collapse; width: 100%; }
 .score th.num { font-family: var(--font); }
 .score tr.you td { font-weight: 600; background: var(--you-wash); }
 .score tr.you td.name { box-shadow: inset 3px 0 0 var(--you); }
+/* A challenger can type a 20-character name: let it wrap rather than push Beta out of view. */
+.score tr.ch td.name { white-space: normal; }
 .score td.rank { color: var(--ink-2); width: 1%; }
 .score.small td, .score.small th { padding: 6px 8px; font-size: 13px; }
 .rk { display: inline-block; margin-left: 6px; padding: 0 5px; border-radius: 6px; font-size: 10.5px; font-weight: 600; line-height: 16px; color: var(--ink-2); background: var(--surface-2); font-family: var(--font); vertical-align: 1px; }
@@ -509,7 +511,7 @@ details.block > summary { cursor: pointer; min-height: 36px; display: flex; alig
   input[type="range"] { height: 44px; }
   .slider-wrap::after { top: 12px; bottom: 12px; }
   .u-legend .u-series > * { vertical-align: middle; }
-  .u-legend .u-series + .u-series > * { padding-top: 10px; padding-bottom: 10px; }
+  .u-legend .u-series + .u-series > * { padding-top: 12.5px; padding-bottom: 12.5px; }
   .prose .turn-steps { flex-direction: column; gap: 22px; }
   .turn-steps li + li::before { left: 50%; top: -17px; margin: 0 0 0 -5px; transform: rotate(135deg); }
   .game-status { gap: 10px 20px; }

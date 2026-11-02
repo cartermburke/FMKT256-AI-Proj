@@ -147,7 +147,15 @@ function drawEndLabels(u, spec) {
   for (const l of labels) {
     ctx.font = `${l.strong ? 600 : 400} ${11 * pr}px ${cssVar("--font") || "system-ui"}`;
     ctx.fillStyle = l.strong ? l.color : cssVar("--ink-2");
-    ctx.fillText(l.text, x, l.y);
+    // Long names (a challenger can type 20 characters) end in an ellipsis instead of running
+    // off the canvas; the legend keeps the full name.
+    const room = ctx.canvas.width - 2 * pr - x;
+    let t = l.text;
+    if (ctx.measureText(t).width > room) {
+      while (t.length > 1 && ctx.measureText(t.trimEnd() + "…").width > room) t = t.slice(0, -1);
+      t = t.trimEnd() + "…";
+    }
+    ctx.fillText(t, x, l.y);
   }
   ctx.restore();
 }

@@ -344,6 +344,105 @@ try {
     await tc.close();
   }
 
+  // (12) Third review: other tabs, history after Play again, cleared announcements, long challenger names.
+  {
+    const tabs = await browser.newContext({ viewport: { width: 1280, height: 800 }, reducedMotion: "reduce" });
+    const metaRes = await (await fetch(`http://127.0.0.1:${PORT}/data/meta.json`)).json();
+    const older = new Date(Date.parse(metaRes.as_of + "T12:00:00Z") - 86400000).toISOString().slice(0, 10);
+    // Tab A was opened before the daily refresh (older data) and sits on the home screen.
+    const ta = await tabs.newPage();
+    ta.on("pageerror", (e) => errors.push(String(e)));
+    await ta.route("**/data/meta.json", async (r) => {
+      const res = await r.fetch();
+      await r.fulfill({ response: res, json: { ...(await res.json()), as_of: older } });
+    });
+    await ta.goto(`http://127.0.0.1:${PORT}/#/`);
+    await ta.waitForSelector("#homeData strong");
+    // Tab H, with no game of its own, reads How it works.
+    const th = await tabs.newPage();
+    th.on("pageerror", (e) => errors.push(String(e)));
+    await th.goto(`http://127.0.0.1:${PORT}/#/how`);
+    await th.waitForSelector("#homeData strong", { state: "attached" });
+    // Tab B starts a game and plays a month.
+    const tb = await tabs.newPage();
+    tb.on("pageerror", (e) => errors.push(String(e)));
+    await tb.goto(`http://127.0.0.1:${PORT}/#/`);
+    await tb.click("#startQuick");
+    await tb.waitForSelector("#priceChart canvas");
+    await tb.click('.quick-btns button[data-x="100"]');
+    await tb.click("#nextTurn");
+    await tb.waitForFunction(() => document.querySelector("#sTurn").textContent.startsWith("2 of"));
+    await ta.waitForFunction(() => !document.querySelector("#tabNote").hidden, null, { timeout: 4000 }).catch(() => {});
+    const kept = await tb.evaluate(() => JSON.parse(localStorage.getItem("bt-save-v1") || "null"));
+    check(kept && (await ta.textContent("#tabNote")).includes("newer market data"), "a tab with older data leaves another tab's save alone and asks for a reload");
+    await th.waitForTimeout(300);
+    check(await th.isHidden("#tabNote"), "a tab with no game of its own doesn't say its game was changed");
+    await tb.reload();
+    await tb.waitForSelector("#priceChart canvas", { timeout: 5000 }).catch(() => {});
+    check(!(await tb.isHidden("#screen-game")) && (await tb.textContent("#sTurn")).startsWith("2 of 12"), "the game survives the reload with an older tab open");
+    await tabs.close();
+  }
+  // The order announcement is cleared with the order when the month is played.
+  await page.goto(`http://127.0.0.1:${PORT}/#/`);
+  await page.click("#startQuick");
+  await page.waitForSelector("#priceChart canvas");
+  await page.locator("#quotesTable tr.atm button.px[data-side='B'][data-type='C']").click();
+  await page.waitForFunction(() => document.querySelector("#orderStatus").textContent.startsWith("Added:"), null, { timeout: 2000 }).catch(() => {});
+  await page.click("#nextTurn");
+  await page.waitForFunction(() => document.querySelector("#sTurn").textContent.startsWith("2 of"));
+  await page.waitForTimeout(100);
+  check((await page.textContent("#orderStatus")) === "" && (await page.locator("#legsList li").count()) === 0, "the order announcement is cleared when the month is played");
+  // Play again, finish the second game, and one Back leaves the results.
+  await page.click(".autopilot summary");
+  await page.click("#autoRun");
+  await page.waitForSelector("#resEquityChart canvas");
+  await page.fill("#challengeName", "Bartholomew Jonesy");
+  await page.click("#challengeBtn");
+  const longUrl = await page.evaluate(() => navigator.clipboard.readText());
+  await page.click("#playAgain");
+  await page.waitForSelector("#screen-game:not([hidden])");
+  await page.waitForSelector("#priceChart canvas");
+  await page.click(".autopilot summary");
+  await page.click("#autoRun");
+  await page.waitForSelector("#screen-results:not([hidden])");
+  await page.goBack();
+  await page.waitForTimeout(300);
+  check((await page.evaluate(() => location.hash)) !== "#/results" && (await page.isHidden("#screen-results")), "after Play again, one Back leaves the second game's results");
+  // A long challenger name wraps instead of pushing the Beta column out of view.
+  for (const w of [1024, 1101]) {
+    const lc = await browser.newContext({ viewport: { width: w, height: 800 }, reducedMotion: "reduce" });
+    const lp = await lc.newPage();
+    lp.on("pageerror", (e) => errors.push(String(e)));
+    await lp.goto(longUrl);
+    await lp.waitForSelector("#priceChart canvas");
+    await lp.click(".autopilot summary");
+    await lp.selectOption("#autoStrat", "buyHold");
+    await lp.click("#autoRun");
+    await lp.waitForSelector("#h2hCard:not([hidden])");
+    const fits = await lp.evaluate(() => { const t = document.querySelector("#scoreTable"); return t.scrollWidth <= t.parentElement.clientWidth + 1; });
+    check(fits, `scorecard with a long challenger name fits at ${w}px`);
+    await lc.close();
+  }
+  // Back during the reveal, then Space on a home button starts a game.
+  {
+    const mc = await browser.newContext({ viewport: { width: 1280, height: 800 }, reducedMotion: "no-preference" });
+    const mp = await mc.newPage();
+    mp.on("pageerror", (e) => errors.push(String(e)));
+    await mp.goto(`http://127.0.0.1:${PORT}/`);
+    await mp.click("#startQuick");
+    await mp.waitForSelector("#priceChart canvas");
+    await mp.click(".autopilot summary");
+    await mp.click("#autoRun");
+    await mp.waitForFunction(() => document.querySelector("#screen-results").classList.contains("ceremony"), null, { timeout: 10000 });
+    await mp.goBack();
+    await mp.waitForSelector("#screen-home:not([hidden])");
+    await mp.focus("#startQuick");
+    await mp.keyboard.press(" ");
+    await mp.waitForSelector("#screen-game:not([hidden])", { timeout: 4000 }).catch(() => {});
+    check(!(await mp.isHidden("#screen-game")), "Space on a home button works after leaving the reveal");
+    await mc.close();
+  }
+
   // How it works + data pages.
   await page.goto(`http://127.0.0.1:${PORT}/#/data`);
   await page.waitForSelector("#dataTable tbody tr");
@@ -381,6 +480,10 @@ try {
   const tiny = await pm.evaluate(() => [...document.querySelectorAll(".brand, .nav a, #themeToggle, .legs li button, details.help > summary, .autopilot > summary")]
     .filter((b) => b.getClientRects().length && (b.getBoundingClientRect().height < 44 || b.getBoundingClientRect().width < 44)).map((b) => b.id || b.className || b.textContent.trim()));
   check(tiny.length === 0 && (await pm.evaluate(() => document.querySelector("#stockSlider").getBoundingClientRect().height)) >= 44, `mobile header, help, leg and slider targets are at least 44px${tiny.length ? ": " + tiny.join(", ") : ""}`);
+  // Chart legend rows toggle a line: the label cell is what takes the tap.
+  const shortLegend = (pg, sel) => pg.evaluate((q) => [...document.querySelectorAll(q)].filter((c) => c.getClientRects().length && c.getBoundingClientRect().height < 44).map((c) => c.textContent.trim()), sel);
+  const tinyLegend = await shortLegend(pm, "#priceChart .u-legend .u-series + .u-series > th, #equityChart .u-legend .u-series + .u-series > th");
+  check(tinyLegend.length === 0, `mobile chart legend rows are at least 44px tall${tinyLegend.length ? ": " + tinyLegend.join(", ") : ""}`);
   const monthLines = await pm.evaluate(() => { const e = document.querySelector("#sTurn"); return Math.round(e.getBoundingClientRect().height / parseFloat(getComputedStyle(e).lineHeight)); });
   check(monthLines === 1, `mobile month counter stays on one line (${monthLines})`);
   const headerFits = await pm.evaluate(() => { const t = document.querySelector(".topbar"); return t.scrollWidth <= t.clientWidth + 1; });
@@ -398,6 +501,8 @@ try {
   const tinyRes = await pm.evaluate(() => [...document.querySelectorAll("#scoreHelp > summary, details.block > summary, .results-actions button")]
     .filter((b) => b.getClientRects().length && (b.getBoundingClientRect().height < 44 || b.getBoundingClientRect().width < 44)).map((b) => b.id || b.textContent.trim()));
   check(tinyRes.length === 0, `mobile results targets are at least 44px${tinyRes.length ? ": " + tinyRes.join(", ") : ""}`);
+  const tinyResLegend = await shortLegend(pm, "#screen-results .u-legend .u-series + .u-series > th");
+  check(tinyResLegend.length === 0, `mobile results legend rows are at least 44px tall${tinyResLegend.length ? ": " + tinyResLegend.join(", ") : ""}`);
   await pm.screenshot({ path: OUT + "11-mobile-results.png", fullPage: true });
   await mobile.close();
 

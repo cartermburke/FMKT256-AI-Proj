@@ -90,17 +90,32 @@ function saveGame() {
   store(SAVE_KEY, JSON.stringify({ code: encodeReplay(S.cfg, S.actions), challenge: S.challengeCode || null, tab: TAB }));
 }
 
-async function restoreSave() {
+/**
+ * Load the saved game. keep: the save came from another tab, so if this tab can't load it,
+ * it leaves the save alone for that tab instead of dropping it.
+ */
+async function restoreSave({ keep = false } = {}) {
   const raw = load(SAVE_KEY);
   if (!raw) return false;
-  const drop = () => { store(SAVE_KEY, null); S.game = null; return false; };
+  const drop = () => { if (!keep) store(SAVE_KEY, null); S.game = null; return false; };
   let code, challenge, cfg, actions;
   try {
     ({ code, challenge } = JSON.parse(raw));
     ({ cfg, actions } = decodeReplay(code));
-    validateReplayCfg(cfg, actions);
   } catch {
     return drop(); // the saved game itself is unreadable: drop it quietly and start fresh
+  }
+  // Saved with newer market data than this tab loaded (the tab was opened before the daily
+  // refresh): the save is fine, this tab is out of date. Keep it and ask for a reload.
+  if (typeof cfg?.end === "string" && /^\d{4}-\d{2}-\d{2}$/.test(cfg.end) && cfg.end > S.meta.as_of) {
+    S.game = null;
+    tabNote("A game was saved in another tab with newer market data. Reload this tab to pick it up.");
+    return false;
+  }
+  try {
+    validateReplayCfg(cfg, actions);
+  } catch {
+    return drop();
   }
   try {
     await setupGame(cfg);
@@ -130,7 +145,16 @@ function ownSave() {
   $("tabNote").hidden = true;
 }
 
-/** Another tab saved a game. On the home screen, pick it up; mid-game, say so and stop saving here. */
+function tabNote(text) {
+  const n = $("tabNote");
+  n.hidden = false;
+  n.textContent = text;
+}
+
+/**
+ * Another tab saved a game. If this tab isn't showing a game of its own, pick it up; if it
+ * is (playing or on its results), say so and stop saving here.
+ */
 function onStorage(e) {
   if (e.key !== SAVE_KEY || !e.newValue) return;
   let from = null;
@@ -141,17 +165,15 @@ function onStorage(e) {
 }
 
 async function otherTabSaved() {
-  if (!$("screen-home").hidden && !S.replay) {
+  if (S.replay) return;
+  if (!S.game || (S.screen !== "game" && S.screen !== "results")) {
     S.game = null;
-    await restoreSave();
+    await restoreSave({ keep: true });
     renderResume();
     return;
   }
-  if (S.replay) return;
   S.saveStale = true;
-  const n = $("tabNote");
-  n.hidden = false;
-  n.textContent = "This game was changed in another tab, so this tab has stopped saving it. Reload to pick up the latest game.";
+  tabNote("This game was changed in another tab, so this tab has stopped saving it. Reload to pick up the latest game.");
 }
 
 // ------------------------------------------------------------------ theme
@@ -231,6 +253,9 @@ async function routeNow(seq) {
   }
   // Leaving a replay drops it, so the game in progress (kept in storage) comes back.
   if (S.replay) { S.game = null; S.replay = false; }
+  // A tab whose save was replaced elsewhere shows the saved game on the home screen, as a tab
+  // already there does.
+  if (S.saveStale && !["#/play", "#/results", "#/how", "#/data"].includes(h)) S.game = null;
   if (!S.game) await restoreSave();
   if (seq !== routeSeq) return; // a newer route is queued; it picks the screen
   if (h === "#/play" && S.game && !S.game.over) { show("game"); renderGame(true); return; }
@@ -313,7 +338,7 @@ function wireStatic() {
   $("revealSkip").addEventListener("click", skipReveal);
   $("revealBlock").addEventListener("click", (e) => { if (S.ceremonyOn && e.target !== $("revealSkip")) endCeremony(); });
   document.addEventListener("keydown", (e) => {
-    if (!S.ceremonyOn || (e.key !== "Escape" && e.key !== " ")) return;
+    if (!S.ceremonyOn || $("screen-results").hidden || (e.key !== "Escape" && e.key !== " ")) return;
     if (e.key === " " && e.target.closest?.("input, textarea, select, [contenteditable]")) return;
     if (e.key === " ") e.preventDefault(); // Space skips; it shouldn't also page down
     skipReveal();
@@ -364,7 +389,14 @@ function isStale(m) {
 
 // ------------------------------------------------------------------ game setup
 
-async function newGame(mode, opts = {}) {
+// Queued like a route, so a game another tab saved that is still loading here can't replace
+// the one the player just asked for.
+function newGame(mode, opts = {}) {
+  routeChain = routeChain.then(() => startNewGame(mode, opts)).catch((e) => fatal(e));
+  return routeChain;
+}
+
+async function startNewGame(mode, opts) {
   const seed = newSeed();
   const rng = mulberry32(seed);
   const pool = poolInfo().map((p) => p.symbol);
@@ -384,6 +416,9 @@ async function newGame(mode, opts = {}) {
   S.replay = false;
   ownSave();
   saveGame();
+  // From the results, replace that entry rather than push: those results are gone, so Back
+  // from the new game (or its results) leaves in one press.
+  if (location.hash === "#/results") history.replaceState(null, "", "#/play");
   if (location.hash === "#/play") { show("game"); renderGame(true); }
   else location.hash = "#/play";
 }
@@ -420,9 +455,11 @@ async function setupGame(cfg) {
   $("errors").dataset.last = "";
   $("errors").dataset.text = "";
   $("errors").innerHTML = "";
+  clearTimeout(S.alertTimer);
   $("errorAlert").textContent = "";
   $("turnToast").dataset.last = "";
   $("turnToast").innerHTML = "";
+  cancelAnimationFrame(S.announceFrame);
   $("orderStatus").textContent = "";
   resetCeremony();
 }
@@ -667,7 +704,8 @@ function announce(msg) {
   const el = $("orderStatus");
   el.textContent = "";
   // A fresh text node after a frame, so the same message twice in a row is still read.
-  requestAnimationFrame(() => { el.textContent = msg; });
+  cancelAnimationFrame(S.announceFrame);
+  S.announceFrame = requestAnimationFrame(() => { el.textContent = msg; });
 }
 
 function currentAction() {
@@ -764,6 +802,10 @@ function updateTicket() {
   if (errs.dataset.last !== key) {
     errs.dataset.last = key;
     $("errorAlert").textContent = errText.join(" ");
+    // Emptied once read (emptying isn't announced), so the visible list is the only lasting
+    // copy and browse mode doesn't meet each error twice with older numbers.
+    clearTimeout(S.alertTimer);
+    S.alertTimer = setTimeout(() => { $("errorAlert").textContent = ""; }, 3000);
   }
 
   const go = $("nextTurn");
@@ -801,6 +843,8 @@ function nextTurn() {
   S.actions.push(normalizeAction(action));
   S.legs = [];
   S.legNote = "";
+  cancelAnimationFrame(S.announceFrame);
+  $("orderStatus").textContent = "";
   S.stockTarget = null;
   S.lastToast = beatFor(t, before, t.equityEnd ?? g.equity);
   saveGame();
@@ -967,7 +1011,7 @@ function renderResults() {
     const name = r.key === "you" ? "You" : esc(r.short);
     const rtd = x.busted || !Number.isFinite(x.retToDD) ? "–" : num(x.retToDD);
     const tot = change(x.totalReturn);
-    return `<tr class="${r.key === "you" ? "you" : ""}"><td class="num rank">${r.overall}${r.tiedWith.length ? '<span class="tie">tie</span>' : ""}</td><td class="name" title="${esc(r.label)}">${sw}${name}</td>
+    return `<tr class="${r.key === "you" ? "you" : r.key === "challenger" ? "ch" : ""}"><td class="num rank">${r.overall}${r.tiedWith.length ? '<span class="tie">tie</span>' : ""}</td><td class="name" title="${esc(r.label)}">${sw}${name}</td>
       <td class="num">${sharpeTxt(x)}${chip(r.ranks.sharpe, "Sharpe")}</td><td class="num xs-hide">${rtd}${chip(r.ranks.retToDD, "return per drawdown")}</td>
       <td class="num">${pct(x.irr, 1, true)}${chip(r.ranks.irr, "IRR")}</td><td class="num">${pct(-x.maxDrawdown, 1)}</td>
       <td class="num opt">${money(x.finalValue)}</td><td class="num opt ${tot.cls}">${tot.text}</td>
@@ -1143,6 +1187,13 @@ async function attachChallenger(code) {
 }
 
 async function openChallenge(code, seq = routeSeq) {
+  // Back to the link of the challenge being played (it stays in history when the player moved
+  // on while it loaded) carries on with that game instead of starting it again.
+  if (code === S.challengeCode && S.game) {
+    if (seq !== routeSeq) return;
+    history.replaceState(null, "", "#/play");
+    return routeNow(seq);
+  }
   const saved = { cfg: S.cfg, market: S.market, spyMarket: S.spyMarket, game: S.game, actions: S.actions, benchmarks: S.benchmarks, replay: S.replay, challenger: S.challenger, challengeCode: S.challengeCode };
   try {
     const { cfg, actions } = decodeReplay(code);
