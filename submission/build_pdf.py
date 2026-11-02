@@ -230,8 +230,10 @@ story += [P("The scorecard and the debrief", "h1"),
             f"{len(demo['across'])} ({', '.join(a['symbol'] for a in demo['across'] if a['beatAll'])}). That is the "
             "lesson the game teaches."),
           framed(img(SUB / "img" / "scorecard.png", W - 8, max_h=3.6 * inch)), Spacer(1, 8),
-          P("The prompt judges on Sharpe, maximum drawdown <i>and</i> IRR, so every strategy is ranked on each of the "
-            "three (the small # in each cell) and ordered by the average of the three ranks. "
+          P("The prompt judges on Sharpe, maximum drawdown <i>and</i> IRR. Every strategy is ranked on Sharpe, on IRR, and "
+            "on return per unit of drawdown: IRR above T-bills ÷ max drawdown, a Calmar-style ratio. That is how max "
+            "drawdown enters the score; raw drawdown would reward tiny positions. Strategies are ordered by the "
+            "average of the three ranks (the small # in each cell), and exact ties share a rank. "
             "<b>Sharpe</b> is the mean daily return in excess of the T-bill rate divided by its standard deviation, "
             "× √252. <b>Max drawdown</b> is the largest peak-to-trough fall in daily equity. <b>IRR</b> is the XIRR of "
             "the account's cash flows. With a fixed stake that is the compound annual growth rate, and the engine "
@@ -301,8 +303,10 @@ for sym in meta["pool"]:
     if s_:
         bests.add(max(keys, key=lambda k: s_[k]["sharpe"]))
 story += bullets([
-    f"<b>Covered calls</b> beat buy &amp; hold on Sharpe for {len(cc_sh)} of {n} ({lst(cc_sh)}), but on total return "
-    f"for only {len(cc_tr)} ({lst(cc_tr)}). Selling the upside smooths the ride but costs return in a strong market.",
+    f"<b>Covered calls</b> beat buy &amp; hold on Sharpe for {len(cc_sh)} of {n} ({lst(cc_sh)}) and on total return for "
+    f"{len(cc_tr)} ({lst(cc_tr)}). Everywhere else they lagged, most of all on the big trenders "
+    f"({lst([x for x in sorted(meta['pool'], key=lambda z: -by[z]['buyHold']['totalReturn']) if x not in cc_tr][:3])}), "
+    "where selling the upside costs the most.",
     f"<b>Protective puts</b> beat buy &amp; hold on Sharpe for {len(pp_sh)} of {n} ({lst(pp_sh)}) and cut the maximum "
     f"drawdown for {len(pp_dd)} of {n}. Insurance has a monthly cost.",
     f"<b>The 200-day trend rule</b> beat buy &amp; hold on Sharpe for {len(tr_sh)} of {n} ({lst(tr_sh)}) and cut the "
@@ -350,18 +354,20 @@ story += [P("How it works under the hood", "h1"), P("Data pipeline: historical i
           P("Free historical option chains for every stock don't exist, so options are priced with Black-Scholes on an "
             "implied volatility built from market data on each day:"),
           P("IV<sub>atm</sub>² = RV<sub>63</sub>(stock)² + [ (0.88 · VIX / 100)² − RV<sub>63</sub>(S&amp;P 500)² ]<br/>"
-            "IV(K) = IV<sub>atm</sub> · (1 − skew · ln(K / S))", "formula"),
+            "IV(K) = IV<sub>atm</sub> · (1 − slope · ln(K / S))", "formula"),
           P("RV<sub>63</sub> is trailing 63-day realized volatility. The bracket is the market's variance risk premium "
             "that day: what investors pay for S&amp;P 500 volatility beyond what the index is delivering. It is "
             "measured at the money, because the VIX is a variance-swap level that sits above at-the-money vol. "
-            "A smile then makes out-of-the-money puts richer and calls cheaper, with skew 3.0 for the index and "
-            "1.25 for single stocks. "
-            "<b>We changed this model twice, both times because the results failed a reality check.</b> Version 1 "
-            "multiplied each stock's realized vol by the index's VIX-to-realized ratio, and covered calls beat buy "
-            "&amp; hold on almost every stock (TSLA +197% vs +32%). Version 2 priced every strike at the VIX level, and "
-            "the AI review caught a 5%-out-of-the-money SPY covered call beating SPY by 46 points. Real buy-write "
-            "indexes trailed the S&amp;P 500 in this bull market. Version 3, shown here, brings the SPY buy-write "
-            "roughly in line with SPY."),
+            "The smile slope is 3.0 on both sides for the index, so its puts are richer and its calls cheaper. Single "
+            "stocks get a milder 1.25 put skew and a flat call wing. "
+            "<b>We replaced the model three times, each time because the results failed a reality check on real "
+            "data.</b> Version 1 multiplied each stock's realized vol by the index's VIX-to-realized ratio, and covered "
+            "calls beat buy &amp; hold on almost every stock (TSLA +197% vs +32%). Version 2 priced every strike at the "
+            "VIX level, and the AI review caught a 5%-out-of-the-money SPY covered call beating SPY by 46 points. "
+            "Version 3 applied the index smile to single stocks, which made their out-of-the-money calls so cheap that "
+            "delta-hedged call buyers profited. With the model shown here, delta-hedged buyers of out-of-the-money "
+            "stock options lose on average, as the empirical evidence says, and the SPY buy-write ends within about 5 "
+            "points of SPY."),
           P("Verification", "h2")]
 story += bullets([
     f"<b>{unit_pass} unit tests</b> ({unit_fail} failing) on the engine: Black-Scholes textbook values and put-call parity, "

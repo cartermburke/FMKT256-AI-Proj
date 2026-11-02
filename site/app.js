@@ -462,7 +462,8 @@ function renderResults() {
 
   $("revealEyebrow").textContent = S.replay ? "Replay" : cfg.blind ? "The tape is revealed" : "Game over";
   $("revealTitle").textContent = `${cfg.blind ? "It was " : ""}${p.name} (${cfg.sym})`;
-  $("revealSub").textContent = `${fmtDate(d0)} to ${fmtDate(d1)} · ${g.turns} months${p.regime ? ` · ${p.regime}` : ""}. The stock returned ${pct(bh.totalReturn + 0, 0, true)} if simply held; you returned ${pct(res.totalReturn, 0, true)}.${g.busted ? " Your account was wiped out." : ""}`;
+  const regime = p.regime && g.turns >= (S.meta.game_years || 5) * 12 ? ` · ${p.regime} (5-year character)` : "";
+  $("revealSub").textContent = `${fmtDate(d0)} to ${fmtDate(d1)} · ${g.turns} months${regime}. The stock returned ${pct(bh.totalReturn + 0, 0, true)} if simply held; you returned ${pct(res.totalReturn, 0, true)}.${g.busted ? " Your account was wiped out." : ""}`;
 
   $("tSharpe").textContent = res.busted ? "bust" : num(res.sharpe);
   $("tSharpeSub").textContent = `Buy & hold: ${num(bh.sharpe)}`;
@@ -476,8 +477,8 @@ function renderResults() {
   // Scorecard: ranked on all three judged metrics (Sharpe, max drawdown, IRR).
   const rows = rankStrategies([{ key: "you", short: "You", label: "You", results: res }, ...benches]);
   const you = rows.find((r) => r.key === "you");
-  $("tRank").textContent = `${you.overall} of ${rows.length}`;
-  $("tRankSub").textContent = `Sharpe #${you.ranks.sharpe} · drawdown #${you.ranks.maxDrawdown} · IRR #${you.ranks.irr}`;
+  $("tRank").textContent = `${you.tiedWith.length ? "=" : ""}${you.overall} of ${rows.length}`;
+  $("tRankSub").textContent = `Sharpe #${you.ranks.sharpe} · return/drawdown #${you.ranks.retToDD} · IRR #${you.ranks.irr}`;
   const tb = $("scoreTable").querySelector("tbody");
   const sharpeTxt = (x) => (x.busted ? "bust" : num(x.sharpe));
   const sup = (n) => `<sup class="rk">#${n}</sup>`;
@@ -486,9 +487,10 @@ function renderResults() {
     const c = STRAT_COLORS[r.key];
     const sw = c ? `<span class="key" style="background:var(${c})"></span>` : `<span class="key"></span>`;
     const name = r.key === "you" ? "You" : r.short;
-    return `<tr class="${r.key === "you" ? "you" : ""}"><td class="num rank">${r.overall}</td><td class="name" title="${r.label}">${sw}${name}</td>
-      <td class="num">${sharpeTxt(x)}${sup(r.ranks.sharpe)}</td><td class="num">${pct(-x.maxDrawdown, 1)}${sup(r.ranks.maxDrawdown)}</td>
-      <td class="num">${pct(x.irr, 1, true)}${sup(r.ranks.irr)}</td>
+    const rtd = x.busted || !Number.isFinite(x.retToDD) ? "–" : num(x.retToDD);
+    return `<tr class="${r.key === "you" ? "you" : ""}"><td class="num rank">${r.tiedWith.length ? "=" : ""}${r.overall}</td><td class="name" title="${r.label}">${sw}${name}</td>
+      <td class="num">${sharpeTxt(x)}${sup(r.ranks.sharpe)}</td><td class="num xs-hide">${rtd}${sup(r.ranks.retToDD)}</td>
+      <td class="num">${pct(x.irr, 1, true)}${sup(r.ranks.irr)}</td><td class="num">${pct(-x.maxDrawdown, 1)}</td>
       <td class="num opt">${money(x.finalValue)}</td><td class="num opt ${signClass(x.totalReturn)}">${pct(x.totalReturn, 1, true)}</td>
       <td class="num opt">${x.busted ? "–" : num(x.sortino)}</td><td class="num opt">${pct(x.vol, 1)}</td><td class="num opt">${num(x.beta)}</td></tr>`;
   }).join("");
@@ -567,6 +569,8 @@ async function copyReplay() {
 }
 
 async function openReplay(code) {
+  // Snapshot the current game so a broken replay link can't replace a game in progress.
+  const saved = { cfg: S.cfg, market: S.market, spyMarket: S.spyMarket, game: S.game, actions: S.actions, benchmarks: S.benchmarks, replay: S.replay };
   try {
     const { cfg, actions } = decodeReplay(code);
     validateReplayCfg(cfg, actions);
@@ -583,6 +587,8 @@ async function openReplay(code) {
     show("results");
     renderResults();
   } catch (e) {
+    Object.assign(S, saved);
+    for (const k of Object.keys(S.charts)) { S.charts[k].destroy(); delete S.charts[k]; }
     fatal(e, { quiet: true });
     show("home");
     renderResume();

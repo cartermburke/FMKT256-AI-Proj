@@ -77,7 +77,7 @@ export function buildMarket(raw, { endDate } = {}) {
   return {
     symbol: raw.stock.symbol,
     name: raw.stock.name,
-    skew: INDEX_SYMBOLS.has(raw.stock.symbol) ? IV_PARAMS.skewIndex : IV_PARAMS.skewStock,
+    skew: INDEX_SYMBOLS.has(raw.stock.symbol) ? IV_PARAMS.skew.index : IV_PARAMS.skew.stock,
     dates,
     price: px,
     spy,

@@ -40,7 +40,7 @@ export class Game {
     if (!(cfg.startIdx >= 0) || !Number.isFinite(market.iv[cfg.startIdx])) {
       throw new Error("not enough history before the game start");
     }
-    this.skew = market.skew ?? 1.25;
+    this.skew = market.skew ?? { down: 1.25, up: 0 };
     // Everything runs on prices rebased to 100 at the start (returns are unchanged).
     this.base = 100 / market.price[cfg.startIdx];
     this.S = market.price.map((p) => p * this.base);

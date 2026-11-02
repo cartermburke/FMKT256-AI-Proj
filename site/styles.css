@@ -263,6 +263,9 @@ details.card summary { cursor: pointer; }
   .score th, .score td { padding: 6px 4px; font-size: 13px; }
   .score td.name { white-space: normal; }
 }
+@media (max-width: 440px) {
+  .score .xs-hide { display: none; }
+}
 @media (max-width: 520px) {
   .nav a { padding: 6px 7px; }
   .brand span { display: none; }

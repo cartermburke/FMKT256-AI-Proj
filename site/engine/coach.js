@@ -30,7 +30,9 @@ export function debrief(game, benchmarks) {
       ? "You leaned in before rallies more than before sell-offs. That could be skill or luck, but it paid."
       : upExp < downExp - 0.1
         ? "You tended to be more exposed going into the worst months than into the best ones."
-        : "Your exposure barely differed between good and bad months, so your result came mostly from the stock itself.",
+        : Math.abs(allExp) < 0.1
+          ? "You were mostly out of the stock, so your result came mainly from T-bill interest and any option premium."
+          : "Your exposure barely differed between good and bad months, so your result came mostly from the stock itself.",
   });
 
   // 2. Shorting.
@@ -40,7 +42,7 @@ export function debrief(game, benchmarks) {
     notes.push({
       title: "Shorting",
       text: `You were net short in ${shortMonths.length} month${shortMonths.length > 1 ? "s" : ""}, and the stock fell in ${won} of them.`,
-      tone: won / shortMonths.length >= 0.5 ? "good" : "bad",
+      tone: won / shortMonths.length > 0.5 ? "good" : won / shortMonths.length < 0.5 ? "bad" : "neutral",
       detail: "Shorts also pay a 0.5% a year borrow fee and lose the dividends, because the price series includes them.",
     });
   }
@@ -80,10 +82,12 @@ export function debrief(game, benchmarks) {
     const you = rows.find((r) => r.key === "you");
     const best = rows.find((r) => r.key !== "you");
     const bh = benchmarks.find((b) => b.key === "buyHold");
+    const ties = you.tiedWith.map((k) => (rows.find((r) => r.key === k) || {}).short).filter(Boolean);
+    const mid = (rows.length + 1) / 2;
     notes.push({
       title: "Versus the benchmarks",
-      text: `Overall you placed ${ord(you.overall)} of ${rows.length}: ${ord(you.ranks.sharpe)} on Sharpe, ${ord(you.ranks.maxDrawdown)} on max drawdown and ${ord(you.ranks.irr)} on IRR.${best ? ` The top benchmark was ${best.short}.` : ""}`,
-      tone: you.overall <= Math.ceil(rows.length / 2) ? "good" : "bad",
+      text: `Overall you placed ${ties.length ? "joint " : ""}${ord(you.overall)} of ${rows.length}${ties.length ? ` (tied with ${ties.join(", ")})` : ""}: ${ord(you.ranks.sharpe)} on Sharpe, ${ord(you.ranks.retToDD)} on return per unit of drawdown and ${ord(you.ranks.irr)} on IRR.${best && !ties.includes(best.short) ? ` The top benchmark was ${best.short}.` : ""}`,
+      tone: you.overall < mid ? "good" : you.overall > mid ? "bad" : "neutral",
       detail: bh ? `Simply buying and holding returned ${pct(bh.results.totalReturn)} with a ${pct(bh.results.maxDrawdown)} max drawdown. You returned ${pct(res.totalReturn)} with ${pct(res.maxDrawdown)}.` : "",
     });
   }

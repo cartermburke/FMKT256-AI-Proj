@@ -49,8 +49,13 @@ export const IV_PARAMS = {
   minFracOfRv: 0.75, // at-the-money vol never below 75% of the stock's own realized vol
   floor: 0.08,       // never price below 8% vol
   cap: 2.5,          // or above 250%
-  skewStock: 1.25,   // smile slope for single stocks (per unit of log-moneyness)
-  skewIndex: 3.0,    // index options carry a much steeper put skew
+  // Smile slopes per unit of log-moneyness, below (puts) and above (calls) the money.
+  // Index: a steep, monotone skew (OTM index calls trade below ATM vol).
+  // Single stocks: a milder put skew and a flat call wing (OTM stock calls are not cheap).
+  skew: {
+    index: { down: 3.0, up: 3.0 },
+    stock: { down: 1.25, up: 0.0 },
+  },
 };
 
 /** Instruments priced with index-style skew. */
@@ -77,12 +82,14 @@ export function impliedVol(rvStock, rvSpy, vixLevel, p = IV_PARAMS) {
 }
 
 /**
- * Volatility smile: IV(K) = IV_atm × (1 − skew × ln(K/S)), clipped to [0.5, 2] × IV_atm.
- * Out-of-the-money puts (K < S) are priced richer and out-of-the-money calls cheaper,
- * as in real equity option markets.
+ * Volatility smile: IV(K) = IV_atm × (1 − slope × ln(K/S)), clipped to [0.5, 2] × IV_atm,
+ * with separate slopes below the money (puts richer) and above it (index calls cheaper,
+ * single-stock calls flat). `skew` is {down, up} or a single number for both.
  */
 export function smileVol(atm, moneyness, skew, p = IV_PARAMS) {
-  const v = atm * (1 - skew * Math.log(moneyness));
+  const k = Math.log(moneyness);
+  const slope = typeof skew === "number" ? skew : k < 0 ? skew.down : skew.up;
+  const v = atm * (1 - slope * k);
   const clipped = Math.min(2 * atm, Math.max(0.5 * atm, v));
   return Math.min(p.cap, Math.max(p.floor, clipped));
 }

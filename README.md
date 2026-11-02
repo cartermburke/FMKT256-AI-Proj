@@ -12,7 +12,7 @@ Built with Claude (Anthropic) as the AI pair-programmer. Academic exercise, not 
 - You trade it **one month (21 trading days) at a time** over the most recent **5 years** (60 turns), or a random 12-month slice in a quick round:
   - **Stock:** −100% (short) to +150% (long on margin) of equity.
   - **Options:** one-month European calls and puts at 90/95/100/105/110% strikes. Writes must be covered or cash-secured.
-- At the end the stock is revealed and you're scored on **Sharpe ratio, maximum drawdown and IRR**, plus Sortino, volatility and beta. Five auto-played benchmarks run on the same data with the same costs: buy & hold, the S&P 500, a covered call, a protective put and a 200-day trend rule.
+- At the end the stock is revealed and you're scored on **Sharpe ratio, maximum drawdown and IRR**, plus Sortino, volatility and beta. Six auto-played benchmarks run on the same data with the same costs: buy & hold, the S&P 500, a covered call, a protective put, a 200-day trend rule, and T-bills.
 - A **coach's debrief** explains what drove your result. A **replay link** lets anyone reproduce your exact game.
 
 Full rules, the option-pricing model and the metric definitions are on the site's *How it works* page.
@@ -67,8 +67,8 @@ node tests/e2e.mjs                                # Playwright: plays games thro
 
 ## Key modelling choices
 
-- **Implied vol:** `IV_atm² = RV63(stock)² + (0.88·VIX/100)² − RV63(SPY)²`, then a smile `IV(K) = IV_atm·(1 − skew·ln(K/S))` with skew 3.0 for the index and 1.25 for single stocks. This adds the market's at-the-money variance risk premium once, in variance units, and prices out-of-the-money puts richer than calls. Two earlier versions failed reality checks and were replaced: one made covered calls dominate almost every stock, and the other let a SPY buy-write beat SPY by 46 points.
-- **Leverage and ranking:** net exposure (stock plus option delta) is capped at −100%/+150% per order, and all option legs together at 200% of equity notional. Written puts must be secured by cash left after the order. The overall rank is the average of the Sharpe, max-drawdown and IRR ranks.
+- **Implied vol:** `IV_atm² = RV63(stock)² + (0.88·VIX/100)² − RV63(SPY)²`, then a smile `IV(K) = IV_atm·(1 − slope·ln(K/S))`: slope 3.0 on both sides for the index, and for single stocks 1.25 on the put side with a flat call wing. This adds the market's at-the-money variance risk premium once, in variance units, and prices out-of-the-money puts richer than calls. Two earlier versions failed reality checks and were replaced: one made covered calls dominate almost every stock, and the other let a SPY buy-write beat SPY by 46 points.
+- **Leverage and ranking:** net exposure (stock plus option delta) is capped at −100%/+150% per order, and all option legs together at 200% of equity notional. Written puts must be secured by cash left after the order. The overall rank is the average of the Sharpe, return-per-unit-of-drawdown and IRR ranks. Raw drawdown isn't averaged in, because it would reward tiny positions.
 - **Frictions:**
   - 5 bp on stock trades.
   - Option half-spread of 2.5% of premium, with a minimum of 5 bp of spot.

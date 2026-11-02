@@ -187,11 +187,11 @@
       </div>
 
       <div class="card">
-        <div class="card-head"><h2>Scorecard</h2><span class="muted small">Ranked on all three judged metrics: the average of each strategy's Sharpe, max-drawdown and IRR ranks (the small #). Every strategy pays the same costs on the same data.</span></div>
+        <div class="card-head"><h2>Scorecard</h2><span class="muted small">Ordered by the average of three ranks (the small #): Sharpe, return per unit of drawdown (IRR above T-bills ÷ max drawdown), and IRR. Every strategy pays the same costs on the same data. “=” marks a tie.</span></div>
         <div class="table-wrap">
           <table class="score" id="scoreTable">
             <thead><tr>
-              <th class="num">#</th><th>Strategy</th><th class="num">Sharpe</th><th class="num">Max DD</th><th class="num">IRR</th>
+              <th class="num">#</th><th>Strategy</th><th class="num">Sharpe</th><th class="num xs-hide" title="IRR above T-bills ÷ max drawdown">Ret/DD</th><th class="num">IRR</th><th class="num">Max DD</th>
               <th class="num opt">Ending value</th><th class="num opt">Total return</th><th class="num opt">Sortino</th><th class="num opt">Volatility</th><th class="num opt">Beta</th>
             </tr></thead>
             <tbody></tbody>
@@ -223,7 +223,7 @@
         <summary><h2 class="inline">Month-by-month log</h2></summary>
         <div class="table-wrap">
           <table class="score small" id="logTable">
-            <thead><tr><th>Month</th><th class="num">Stock move</th><th class="num">Exposure</th><th>Options</th><th class="num">Option P&amp;L</th><th class="num">Your return</th><th class="num">Equity</th></tr></thead>
+            <thead><tr><th>Month</th><th class="num">Stock move</th><th class="num" title="Stock plus option delta">Net exposure</th><th>Options</th><th class="num">Option P&amp;L</th><th class="num">Your return</th><th class="num">Equity</th></tr></thead>
             <tbody></tbody>
           </table>
         </div>
@@ -251,15 +251,21 @@
         <li><strong>Leverage cap includes options:</strong> your <em>net</em> exposure, meaning the stock plus the delta of every option leg, must stay between −100% and +150% when you place an order. Options can't be used to get around the stock limits.</li>
         <li><strong>Writing options:</strong> written calls must be covered by long shares. Written puts must be cash-secured: after the whole order you need cash at least equal to the strike value, not counting short-sale proceeds.</li>
         <li><strong>Financing:</strong> idle cash (including short-sale proceeds) earns the 13-week T-bill yield (^IRX) daily. Margin debit pays T-bill + 1.5%. Short positions pay a 0.5%/yr borrow fee. An order can't take borrowing above 50% of equity.</li>
-        <li><strong>Drift and risk controls:</strong> the limits above apply to orders. Between orders, positions drift with the market, and you can always keep or reduce a position that has drifted past a limit. The account is marked to market at every daily close, including option-expiry days. If equity falls below 25% of the gross stock position, a margin call liquidates the stock and closes all options. If equity hits zero, the game is over, the rest of the window counts as zero, and the account ranks last.</li>
+        <li><strong>Drift and risk controls:</strong> the limits above apply to orders. Between orders, positions drift with the market. You can always keep a drifted position or bring the stock back within the limits, but buying options still needs buying power. The account is marked to market at every daily close, including option-expiry days. If equity falls below 25% of the gross stock position, a margin call liquidates the stock and closes all options. If equity hits zero, the game is over, the rest of the window counts as zero, and the account ranks last.</li>
       </ul>
 
       <h2>Option pricing</h2>
       <p>Historical option quotes for every stock aren't freely available, so options are priced with Black-Scholes on an implied volatility built from market data on each day:</p>
       <p class="formula">IV<sub>atm</sub>² = RV<sub>63</sub>(stock)² + [ (0.88 × VIX/100)² − RV<sub>63</sub>(S&amp;P 500)² ]</p>
       <p class="formula">IV(K) = IV<sub>atm</sub> × (1 − skew × ln(K/S))</p>
-      <p>RV<sub>63</sub> is trailing 63-day realized volatility. The bracket is the market's <em>variance risk premium</em> on that day: how much option buyers pay for S&amp;P 500 volatility above what the index has actually been delivering. The VIX is a variance-swap level that includes the skew, so at-the-money index vol is taken as 0.88 × VIX. Adding the premium once, in variance units, prices at-the-money SPY options at 0.88 × VIX, and gives single stocks a small premium over their own realized vol. That is consistent with research showing the volatility risk premium is concentrated in index options. A smile is then applied across strikes: out-of-the-money puts are priced richer and calls cheaper, with a steeper skew for the index (3.0) than for single stocks (1.25). At-the-money vol is floored at 75% of the stock's realized vol, and every IV is kept between 8% and 250%. You buy at the ask and sell at the bid: a half-spread of 2.5% of the premium, with a minimum of 5 bp of the stock price. The risk-free rate is the T-bill yield. Because the price series is total-return adjusted, the model treats the stock as non-dividend-paying.</p>
-      <p><strong>How we got here.</strong> The first version multiplied each stock's realized vol by the index's VIX-to-realized ratio, and covered calls beat buy-and-hold on almost every stock. A second version priced every strike at the VIX level, and a 5%-out-of-the-money SPY covered call still beat SPY by 46 percentage points over five years. That is a modelling artifact: real buy-write indexes trailed the S&amp;P 500 in this bull market. Adding the at-the-money adjustment and the smile brings the benchmarks back in line with what real markets did.</p>
+      <p>RV<sub>63</sub> is trailing 63-day realized volatility. The bracket is the market's <em>variance risk premium</em> on that day: how much option buyers pay for S&amp;P 500 volatility above what the index has actually been delivering. The VIX is a variance-swap level that includes the skew, so at-the-money index vol is taken as 0.88 × VIX. Adding the premium once, in variance units, prices at-the-money SPY options at 0.88 × VIX, and gives single stocks a small premium over their own realized vol. That is consistent with research showing the volatility risk premium is concentrated in index options. A smile is then applied across strikes. For the index the skew is steep and runs one way (slope 3.0), so puts are richer and calls cheaper. For single stocks the puts get a milder skew (1.25) and the calls stay at at-the-money vol, because out-of-the-money stock calls aren't cheap in real markets. Each smile is clipped to between 0.5× and 2× at-the-money vol. At-the-money vol is floored at 75% of the stock's realized vol, and every IV is kept between 8% and 250%. You buy at the ask and sell at the bid: a half-spread of 2.5% of the premium, with a minimum of 5 bp of the stock price. The risk-free rate is the T-bill yield. Because the price series is total-return adjusted, the model treats the stock as non-dividend-paying.</p>
+      <p><strong>How we got here.</strong> Each version below was replaced after a reality check on real data.</p>
+      <ol>
+        <li>Multiplying each stock's realized vol by the index's VIX-to-realized ratio made covered calls beat buy-and-hold on almost every stock.</li>
+        <li>Pricing every strike at the VIX level let a 5%-out-of-the-money SPY covered call beat SPY by 46 percentage points over five years.</li>
+        <li>Applying the index-style smile to single stocks made their out-of-the-money calls too cheap, so call buyers profited even after delta hedging.</li>
+      </ol>
+      <p>With the current model, delta-hedged buyers of out-of-the-money single-stock options lose on average, as the empirical evidence says they should. The SPY 105% buy-write finishes within about 5 points of SPY over the full window (+83% vs +78%), down from 46.</p>
 
       <h2>Scoring</h2>
       <ul>
@@ -268,7 +274,8 @@
         <li><strong>Maximum drawdown:</strong> the largest peak-to-trough decline of the daily equity curve.</li>
         <li><strong>IRR:</strong> the money-weighted internal rate of return (XIRR, actual/365) of the account's cash flows. With a fixed stake there are only two flows (the $100,000 in and the ending value out), so IRR equals the compound annual growth rate. The engine computes a general XIRR so contributions could be added later.</li>
         <li><strong>Beta:</strong> covariance of your daily returns with SPY's, ÷ SPY's variance.</li>
-        <li><strong>Overall rank:</strong> the assignment judges on Sharpe, maximum drawdown <em>and</em> IRR, so every strategy is ranked on each of the three and ordered by the average of the three ranks, with ties broken by Sharpe. Sharpe alone can misorder things: a near-riskless account that trails T-bills slightly has a tiny negative excess return divided by a tiny volatility, which gives a very negative Sharpe. A busted account has no meaningful Sharpe and ranks last.</li>
+        <li><strong>Return per unit of drawdown:</strong> IRR in excess of the T-bill return ÷ maximum drawdown (a Calmar-style ratio), with the drawdown floored at 1%.</li>
+        <li><strong>Overall rank:</strong> the assignment judges on Sharpe, maximum drawdown <em>and</em> IRR. Every strategy is ranked on Sharpe, on return per unit of drawdown, and on IRR, and ordered by the average of the three ranks; exact ties share a rank. Max drawdown enters per unit of return, not raw. Raw drawdown shrinks with position size while Sharpe doesn't, so a tiny near-cash position (say, writing a few puts) would otherwise collect two good ranks for free. Sharpe alone also misorders some cases: a near-riskless account that trails T-bills slightly has a tiny negative excess return divided by a tiny volatility. A busted account has no meaningful Sharpe and ranks last.</li>
       </ul>
 
       <h2>Benchmarks</h2>

@@ -151,13 +151,38 @@ export function cagr(startValue, endValue, startDate, endDate) {
   return (endValue / startValue) ** (1 / yrs) - 1;
 }
 
+/** Compound annual growth of the T-bill account over the same window (Actual/365). */
+export function tbillCagr(rfDaily, startDate, endDate) {
+  let g = 1;
+  for (const r of rfDaily || []) g *= 1 + r;
+  return cagr(1, g, startDate, endDate);
+}
+
+/**
+ * Return per unit of drawdown (Calmar-style): IRR in excess of T-bills ÷ max drawdown.
+ * Like Sharpe it doesn't change with position size, so a tiny position can't look good
+ * just by being small. Drawdowns under 1% are floored at 1% to avoid dividing by ~0.
+ */
+export function returnToDrawdown(irr, rfIrr, mdd) {
+  const ex = irr - (Number.isFinite(rfIrr) ? rfIrr : 0);
+  if (!Number.isFinite(ex)) return NaN;
+  return ex / Math.max(mdd, 0.01);
+}
+
 /** Full scorecard for one equity curve. */
 export function scorecard({ equity, dates, rfDaily, benchReturns, flows }) {
   const rets = dailyReturns(equity);
   const dd = maxDrawdown(equity);
   const start = equity[0];
   const end = equity[equity.length - 1];
+  const irr = xirr(flows ?? [
+    { date: dates[0], amount: -start },
+    { date: dates[dates.length - 1], amount: Math.max(0, end) },
+  ]);
+  const rfIrr = tbillCagr(rfDaily, dates[0], dates[dates.length - 1]);
   return {
+    rfIrr,
+    retToDD: returnToDrawdown(irr, rfIrr, dd.mdd),
     finalValue: end,
     totalReturn: end / start - 1,
     sharpe: sharpe(rets, rfDaily),
@@ -165,10 +190,7 @@ export function scorecard({ equity, dates, rfDaily, benchReturns, flows }) {
     maxDrawdown: dd.mdd,
     ddFrom: dd.from,
     ddTo: dd.to,
-    irr: xirr(flows ?? [
-      { date: dates[0], amount: -start },
-      { date: dates[dates.length - 1], amount: Math.max(0, end) },
-    ]),
+    irr,
     cagr: cagr(start, end, dates[0], dates[dates.length - 1]),
     vol: annualVol(rets),
     beta: benchReturns ? beta(rets, benchReturns) : NaN,

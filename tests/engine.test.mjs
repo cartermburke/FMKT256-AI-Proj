@@ -84,6 +84,10 @@ test("volatility smile: puts richer, calls cheaper, clipped", () => {
   assert.ok(smileVol(0.2, 0.9, 3) > smileVol(0.2, 0.95, 3));
   assert.ok(smileVol(0.2, 1.1, 3) < smileVol(0.2, 1.05, 3));
   close(smileVol(0.2, 0.5, 3), 0.4, 1e-12); // clipped at 2x ATM
+  // Asymmetric stock smile: put skew, flat call wing.
+  const stock = { down: 1.25, up: 0 };
+  close(smileVol(0.4, 1.1, stock), 0.4, 1e-12);
+  close(smileVol(0.4, 0.9, stock), 0.4 * (1 - 1.25 * Math.log(0.9)), 1e-12);
 });
 
 test("trade price adds/subtracts half-spread with a floor", () => {
@@ -373,7 +377,7 @@ test("a bust pads the curve to the window end and has no Sharpe", () => {
   const res = g.results();
   assert.ok(Number.isNaN(res.sharpe));
   assert.equal(res.irr, -1);
-  const ranked = rankStrategies([{ key: "you", results: res }, { key: "cash", results: { sharpe: 0, maxDrawdown: 0, irr: 0.03 } }]);
+  const ranked = rankStrategies([{ key: "you", results: res }, { key: "cash", results: { sharpe: 0, retToDD: 0, maxDrawdown: 0, irr: 0.03 } }]);
   assert.equal(ranked[ranked.length - 1].key, "you");
 });
 
@@ -402,12 +406,27 @@ test("autopilot taking over mid-game follows its own rule", () => {
   assert.ok(legalize(g, { stock: 1.5, legs: [] }));
 });
 
-test("overall ranking uses Sharpe, drawdown and IRR together", () => {
-  const rows = rankStrategies([
-    { key: "riskless", results: { sharpe: -0.98, maxDrawdown: 0.006, irr: 0.037 } },
-    { key: "crash", results: { sharpe: -0.53, maxDrawdown: 0.84, irr: -0.25 } },
-    { key: "market", results: { sharpe: 0.54, maxDrawdown: 0.245, irr: 0.122 } },
+test("overall ranking: Sharpe, return per unit of drawdown, and IRR; ties shared", () => {
+  const rf = 0.039;
+  const mk = (sharpe, mdd, irr) => ({ sharpe, maxDrawdown: mdd, irr, retToDD: (irr - rf) / Math.max(mdd, 0.01) });
+  let rows = rankStrategies([
+    { key: "riskless", results: mk(-0.98, 0.006, 0.037) },
+    { key: "crash", results: mk(-0.53, 0.84, -0.25) },
+    { key: "market", results: mk(0.54, 0.245, 0.122) },
   ]);
   assert.deepEqual(rows.map((r) => r.key), ["market", "riskless", "crash"]);
-  assert.deepEqual(rows[1].ranks, { sharpe: 3, maxDrawdown: 1, irr: 2 });
+  // A tiny short-put sliver can't beat a big winner just by being small.
+  rows = rankStrategies([
+    { key: "you", results: mk(1.16, 0.01, 0.046) },
+    { key: "buyHold", results: mk(1.03, 0.664, 0.55) },
+    { key: "cash", results: { sharpe: 0, maxDrawdown: 0, irr: rf, retToDD: 0 } },
+  ]);
+  assert.equal(rows[0].key, "buyHold");
+  // Exact ties share a rank and list the benchmark first.
+  rows = rankStrategies([
+    { key: "you", results: mk(0.5, 0.3, 0.1) },
+    { key: "protectivePut", results: mk(0.5, 0.3, 0.1) },
+  ]);
+  assert.deepEqual(rows.map((r) => [r.key, r.overall]), [["protectivePut", 1], ["you", 1]]);
+  assert.deepEqual(rows[1].tiedWith, ["protectivePut"]);
 });
