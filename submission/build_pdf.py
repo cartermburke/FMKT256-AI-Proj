@@ -152,14 +152,28 @@ def on_page(c, doc):
 
 doc = SimpleDocTemplate(str(OUT), pagesize=letter, leftMargin=0.7 * inch, rightMargin=0.7 * inch,
                         topMargin=0.6 * inch, bottomMargin=0.8 * inch, title=f"{team['title']}: FMKT 256 AI project",
-                        author=", ".join(team["team"]), subject=team["course"])
+                        author=", ".join(m["name"] if isinstance(m, dict) else m for m in team["team"]), subject=team["course"])
 W = letter[0] - 1.4 * inch
 story = []
 
-# ----------------------------------------------------------------------------- page 1
+# ----------------------------------------------------------------------------- page 1: cover
 
-story += [P(team["title"], "title"), P(team["subtitle"], "subtitle"),
-          P(f"{team['course']}<br/>Team: {', '.join(team['team'])}", "meta"), Spacer(1, 10)]
+members = [m if isinstance(m, dict) else {"name": m, "netid": ""} for m in team["team"]]
+eyebrow = ParagraphStyle("eyebrow", fontName="Sans-Bold", fontSize=9, leading=12, textColor=ACCENT_INK, spaceAfter=6)
+cover_title = ParagraphStyle("cover_title", parent=ss["title"], fontSize=46, leading=50, spaceAfter=6)
+story += [Spacer(1, 6), P("FMKT 256 · FALL 2026 · AI EXTRA CREDIT PROJECT", "meta"), Spacer(1, 4),
+          Paragraph(team["title"], cover_title), P(team["subtitle"], "subtitle"),
+          P("Prompt 1: a finance app built with AI (a trading game)", "meta"), Spacer(1, 10)]
+
+team_rows = [[P("<b>Team member</b>", "cell"), P("<b>NetID</b>", "cell")]]
+for m in members:
+    nid = m.get("netid") or "<font color='#b45309'>[NetID]</font>"
+    team_rows.append([P(m["name"], "cellb"), P(nid, "cell")])
+tt = Table(team_rows, colWidths=[2.6 * inch, 1.6 * inch], hAlign="LEFT")
+tt.setStyle(TableStyle([("LINEBELOW", (0, 0), (-1, 0), 0.8, INK2), ("LINEBELOW", (0, 1), (-1, -1), 0.4, GRID),
+                        ("TOPPADDING", (0, 0), (-1, -1), 4), ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+                        ("LEFTPADDING", (0, 0), (-1, -1), 2)]))
+story += [tt, Spacer(1, 6), P(f"Submitted {team.get('submitted', '')}", "meta"), Spacer(1, 12)]
 
 link_rows = [
     ["Play the game (no login, desktop or phone)", link(team["site_url"])],
@@ -172,7 +186,10 @@ lt = Table([[P(a, "cellb"), Paragraph(b, ss["link"])] for a, b in link_rows], co
 lt.setStyle(TableStyle([("BACKGROUND", (0, 0), (-1, -1), WASH), ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
                         ("LINEBELOW", (0, 0), (-1, -2), 0.5, colors.white), ("LEFTPADDING", (0, 0), (-1, -1), 8),
                         ("TOPPADDING", (0, 0), (-1, -1), 5), ("BOTTOMPADDING", (0, 0), (-1, -1), 5)]))
-story += [lt, Spacer(1, 10)]
+story += [lt, Spacer(1, 12), framed(img(SUB / "img" / "home.png", W - 8, max_h=3.45 * inch, crop_h_frac=0.78))]
+story.append(PageBreak())
+
+# ----------------------------------------------------------------------------- page 2: what & why
 
 story += [P("What we built", "h1"),
           P(f"<b>Blind Tape</b> is a browser trading game on real market data, built with Claude. Each player starts "
@@ -181,16 +198,26 @@ story += [P("What we built", "h1"),
             "The game steps through the <b>most recent five years</b> of daily prices one month at a time. Each month the "
             "player sets a long or short stock position and can trade one-month <b>calls and puts</b>. At the end the "
             "stock is revealed and the player is scored on <b>Sharpe ratio, maximum drawdown and IRR</b>, the criteria "
-            "named in the prompt. The score is set against six benchmark strategies played on the same data with the "
-            "same costs."),
+            "named in the prompt, against six benchmark strategies played on the same data with the same costs. A "
+            "friend can then be challenged to the exact same blind tape."),
           P("How it meets the prompt", "h2")]
 story += bullets([
-    "<b>Trading game:</b> fixed stake, one stock plus its derivatives over a fixed five-year period, judged on Sharpe, max drawdown and IRR. The overall rank is the average of the three ranks; Sortino, volatility and beta are also reported.",
+    "<b>Trading game:</b> fixed stake, one stock plus its derivatives over a fixed five-year period, judged on Sharpe, max drawdown and IRR, with Sortino, volatility and beta also reported.",
     f"<b>Imports historical data:</b> about 7 years of daily adjusted closes for {n_stocks} instruments, the VIX and the 13-week T-bill yield, downloaded by code (yfinance with fallbacks) and validated before use.",
     f"<b>Updates when new data arrive:</b> a scheduled GitHub Actions job runs every weekday after the close, appends the new bar, commits it and redeploys the site. The five-year window always ends at the latest close (currently {as_of_txt}).",
     "<b>Repeatable without coding:</b> adding a stock to the game is one line in <font name='Mono'>config/tickers.json</font>; the next run downloads its history automatically.",
     "<b>No logins:</b> the game, the code and the data history are all public pages.",
 ])
+story += [P("What's original", "h2")]
+story += bullets([
+    "<b>No hindsight.</b> \"Trade a stock over the last five years\" is easy to win if you remember NVIDIA. Blind mode hides the name and dates and rebases the price, so the game tests decisions, not memory.",
+    "<b>Options without option data.</b> Free historical option chains don't exist, so every option is priced from that day's market: an at-the-money vol anchored to the VIX plus a volatility smile. We checked the model against the empirical evidence (delta-hedged option returns), not just intuition.",
+    "<b>A score that can't be gamed.</b> The overall rank combines the prompt's three metrics. Drawdown enters per unit of return, so tiny positions can't win by being small. Every result sits beside six benchmark strategies on the same tape, and a rule-based coach explains what drove it.",
+    "<b>Head-to-head with no server.</b> A challenge link carries the stock, the window and every order. A friend plays the same blind tape, and the two of you are ranked side by side.",
+    "<b>Built and audited by AI agents.</b> One panel chose the prompt, two adversarial rounds tried to break the game, and every bug found came with a reproduction and got a regression test (page 7).",
+])
+story += [Spacer(1, 6), framed(img(SUB / "img" / "h2h.png", W - 8, max_h=2.1 * inch)),
+          Spacer(1, 3), P("Head-to-head result after a friend played the demo game's tape from a challenge link.", "small")]
 story.append(PageBreak())
 
 # ----------------------------------------------------------------------------- page 2

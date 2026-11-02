@@ -1,10 +1,24 @@
 {
-  "_comment": "Edit team member names here, then run: python3 submission/build_pdf.py",
+  "_comment": "Edit names and Duke NetIDs here, then run: python3 submission/build_pdf.py",
   "title": "Blind Tape",
   "subtitle": "A five-year stock & options trading challenge on real market data",
   "course": "FMKT 256 · Fall 2026 · AI Extra Credit · Prompt 1: Finance app (trading game)",
-  "team": ["Team member 1", "Team member 2", "Team member 3"],
+  "team": [
+    {
+      "name": "Carter Burke",
+      "netid": ""
+    },
+    {
+      "name": "Grant Mayer",
+      "netid": ""
+    },
+    {
+      "name": "Lauren Schwartz",
+      "netid": ""
+    }
+  ],
   "site_url": "https://cartermburke.github.io/FMKT256-AI-Proj/",
   "repo_url": "https://github.com/cartermburke/FMKT256-AI-Proj",
-  "actions_url": "https://github.com/cartermburke/FMKT256-AI-Proj/actions/workflows/update-data.yml"
+  "actions_url": "https://github.com/cartermburke/FMKT256-AI-Proj/actions/workflows/update-data.yml",
+  "submitted": "November 3, 2026"
 }

@@ -33,7 +33,7 @@
       <div class="hero">
         <p class="eyebrow">A five-year stock &amp; options challenge</p>
         <h1>Five years. One stock. Its options.<br>No hindsight.</h1>
-        <p class="lede">You get <strong>$100,000</strong> and a stock drawn at random from real market history. Its name and dates are hidden and the price starts at 100, so you can't trade on what you remember. Each turn is one month: set your stock position, long or short, and trade one-month calls and puts. At the end the stock is revealed and you're scored on <strong>Sharpe ratio</strong>, <strong>maximum drawdown</strong> and <strong>IRR</strong> against six benchmark strategies played on the same data.</p>
+        <p class="lede">You get <strong>$100,000</strong> and a stock drawn at random from real market history. Its name and dates are hidden and the price starts at 100, so you can't trade on what you remember. Each turn is one month: set your stock position, long or short, and trade one-month calls and puts. At the end the stock is revealed and you're scored on <strong>Sharpe ratio</strong>, <strong>maximum drawdown</strong> and <strong>IRR</strong> against six benchmark strategies played on the same data. Then send a friend a challenge link: they get the exact same blind tape, and you're ranked head-to-head.</p>
       </div>
 
       <div class="resume card" id="resumeCard" hidden>
@@ -79,6 +79,7 @@
         <div class="stat"><span class="stat-label">Cash</span><span class="stat-value" id="sCash">–</span></div>
         <div class="stat"><span class="stat-label">Implied vol</span><span class="stat-value" id="sIv">–</span></div>
       </div>
+      <div id="h2hBanner" class="h2h-banner" hidden></div>
       <div id="turnToast" class="toast" role="status" aria-live="polite" hidden></div>
 
       <div class="game-grid">
@@ -178,6 +179,11 @@
         <p class="lede" id="revealSub">–</p>
       </div>
 
+      <div class="card h2h" id="h2hCard" hidden>
+        <div class="card-head"><h2>Head-to-head</h2><span class="muted small">Same stock, same months, same prices</span></div>
+        <div id="h2hBody"></div>
+      </div>
+
       <div class="tiles">
         <div class="tile"><span class="tile-label">Overall rank</span><span class="tile-value" id="tRank">–</span><span class="tile-sub" id="tRankSub"></span></div>
         <div class="tile"><span class="tile-label">Sharpe ratio</span><span class="tile-value" id="tSharpe">–</span><span class="tile-sub" id="tSharpeSub"></span></div>
@@ -232,6 +238,8 @@
       <div class="actions-row">
         <button type="button" class="btn-primary" id="playAgain">Play again</button>
         <button type="button" class="btn-secondary" id="copyReplay">Copy replay link</button>
+        <input type="text" id="challengeName" maxlength="20" placeholder="Your name (optional)" aria-label="Your name for the challenge link">
+        <button type="button" class="btn-secondary" id="challengeBtn">Challenge a friend</button>
         <span class="muted small" id="copyMsg" aria-live="polite"></span>
       </div>
     </section>
@@ -253,6 +261,9 @@
         <li><strong>Financing:</strong> idle cash (including short-sale proceeds) earns the 13-week T-bill yield (^IRX) daily. Margin debit pays T-bill + 1.5%. Short positions pay a 0.5%/yr borrow fee. An order can't take borrowing above 50% of equity.</li>
         <li><strong>Drift and risk controls:</strong> the limits above apply to orders. Between orders, positions drift with the market. You can always keep a drifted position or bring the stock back within the limits, but buying options still needs buying power. The account is marked to market at every daily close, including option-expiry days. If equity falls below 25% of the gross stock position, a margin call liquidates the stock and closes all options. If equity hits zero, the game is over, the rest of the window counts as zero, and the account ranks last.</li>
       </ul>
+
+      <h2>Head-to-head challenges</h2>
+      <p>After a game, <strong>Challenge a friend</strong> copies a link that holds your stock, your window and every order you placed, compressed into the URL, so no server or login is involved. Your friend plays the same blind tape from month 1 without seeing your result. When they finish, the engine replays your orders on the same prices and ranks you side by side, together with the six benchmarks. They can then challenge you back.</p>
 
       <h2>Option pricing</h2>
       <p>Historical option quotes for every stock aren't freely available, so options are priced with Black-Scholes on an implied volatility built from market data on each day:</p>

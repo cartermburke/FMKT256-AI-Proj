@@ -46,9 +46,28 @@ try {
   await page.evaluate(() => window.scrollTo(0, 0));
   const tiles = await page.locator(".tiles").boundingBox();
   await page.screenshot({ path: OUT + "reveal.png", clip: { x: 0, y: 60, width: 1280, height: tiles.y + tiles.height + 16 - 60 } });
-  const card = page.locator("#screen-results .card").first();
+  const card = page.locator("#screen-results .card", { has: page.locator("#scoreTable") });
   await card.screenshot({ path: OUT + "scorecard.png" });
   await page.locator("#coachNotes").screenshot({ path: OUT + "coach.png" });
+
+  // A head-to-head: challenge a friend from the demo game, friend plays the trend rule.
+  await page.fill("#challengeName", "Carter");
+  await ctx.grantPermissions(["clipboard-read", "clipboard-write"]);
+  await page.click("#challengeBtn");
+  await page.waitForFunction(() => document.querySelector("#copyMsg").textContent.includes("Challenge link copied"));
+  const link = await page.evaluate(() => navigator.clipboard.readText());
+  if (!link.includes("#/challenge/")) throw new Error(`unexpected clipboard: ${link.slice(0, 80)}`);
+  const fp = await ctx.newPage();
+  await fp.goto(link);
+  await fp.waitForSelector("#priceChart canvas");
+  await fp.locator("#h2hBanner").screenshot({ path: OUT + "h2h-banner.png" });
+  await fp.click(".autopilot summary");
+  await fp.selectOption("#autoStrat", "trend200");
+  await fp.click("#autoRun");
+  await fp.waitForSelector("#h2hCard:not([hidden])");
+  await fp.evaluate(() => window.scrollTo(0, 0));
+  await fp.locator("#h2hCard").screenshot({ path: OUT + "h2h.png" });
+  await fp.close();
 
   await page.goto(`${base}#/data`);
   await page.waitForSelector("#dataTable tbody tr");

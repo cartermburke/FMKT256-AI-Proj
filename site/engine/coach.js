@@ -86,7 +86,7 @@ export function debrief(game, benchmarks) {
     const mid = (rows.length + 1) / 2;
     notes.push({
       title: "Versus the benchmarks",
-      text: `Overall you placed ${ties.length ? "joint " : ""}${ord(you.overall)} of ${rows.length}${ties.length ? ` (tied with ${ties.join(", ")})` : ""}: ${ord(you.ranks.sharpe)} on Sharpe, ${ord(you.ranks.retToDD)} on return per unit of drawdown and ${ord(you.ranks.irr)} on IRR.${best && !ties.includes(best.short) ? ` The top benchmark was ${best.short}.` : ""}`,
+      text: `Against the ${benchmarks.length} benchmark strategies you placed ${ties.length ? "joint " : ""}${ord(you.overall)} of ${rows.length}${ties.length ? ` (tied with ${ties.join(", ")})` : ""}: ${ord(you.ranks.sharpe)} on Sharpe, ${ord(you.ranks.retToDD)} on return per unit of drawdown and ${ord(you.ranks.irr)} on IRR.${best && !ties.includes(best.short) ? ` The top benchmark was ${best.short}.` : ""}`,
       tone: you.overall < mid ? "good" : you.overall > mid ? "bad" : "neutral",
       detail: bh ? `Simply buying and holding returned ${pct(bh.results.totalReturn)} with a ${pct(bh.results.maxDrawdown)} max drawdown. You returned ${pct(res.totalReturn)} with ${pct(res.maxDrawdown)}.` : "",
     });

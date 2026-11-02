@@ -13,7 +13,7 @@ import { money, pct, num, signClass, fmtDate, fmtMonthYear, isoToSec } from "./u
 
 const $ = (id) => document.getElementById(id);
 const TD = RULES.turnDays;
-const STRAT_COLORS = { you: "--s1", buyHold: "--s2", spy: "--s3", coveredCall: "--s4", protectivePut: "--s5", trend200: "--s6" };
+const STRAT_COLORS = { you: "--s1", buyHold: "--s2", spy: "--s3", coveredCall: "--s4", protectivePut: "--s5", trend200: "--s6", challenger: "--s7" };
 
 const S = {
   meta: null,
@@ -27,6 +27,7 @@ const S = {
   charts: {},
   benchmarks: null,
   replay: false,
+  challenger: null, // { name, results, game } when playing a head-to-head challenge
   lastToast: "",
 };
 
@@ -89,6 +90,10 @@ async function route() {
     await openReplay(h.slice("#/replay/".length));
     return;
   }
+  if (h.startsWith("#/challenge/")) {
+    await openChallenge(h.slice("#/challenge/".length));
+    return;
+  }
   if (h === "#/play" && S.game && !S.game.over) { show("game"); renderGame(); return; }
   if (h === "#/play" && S.game && S.game.over) { location.hash = "#/results"; return; }
   if (h === "#/results" && S.game && S.game.over) { show("results"); renderResults(); return; }
@@ -116,6 +121,7 @@ function wireStatic() {
   });
   $("playAgain").addEventListener("click", () => { location.hash = "#/"; });
   $("copyReplay").addEventListener("click", copyReplay);
+  $("challengeBtn").addEventListener("click", copyChallenge);
 
   $("stockSlider").addEventListener("input", (e) => {
     S.stockTarget = Number(e.target.value) / 100;
@@ -204,6 +210,7 @@ async function setupGame(cfg) {
   S.legs = [];
   S.stockTarget = null;
   S.benchmarks = null;
+  S.challenger = null;
   S.lastToast = "";
   for (const k of Object.keys(S.charts)) { S.charts[k].destroy(); delete S.charts[k]; }
   document.querySelector(".autopilot").open = false;
@@ -232,6 +239,11 @@ function renderGame(fresh = false) {
   $("sExposure").textContent = pct(ctx.exposure, 0);
   $("sCash").textContent = money(ctx.cash);
   $("sIv").textContent = pct(ctx.iv, 0);
+  const h2h = $("h2hBanner");
+  h2h.hidden = !S.challenger;
+  if (S.challenger) {
+    h2h.textContent = `Head-to-head: ${S.challenger.name} played this exact tape. Their score stays hidden until you finish, then you're ranked side by side.`;
+  }
   const toast = $("turnToast");
   toast.hidden = !S.lastToast;
   toast.innerHTML = S.lastToast;
@@ -475,7 +487,10 @@ function renderResults() {
   $("tFinalSub").textContent = `from $100,000 (${pct(res.totalReturn, 0, true)})`;
 
   // Scorecard: ranked on all three judged metrics (Sharpe, max drawdown, IRR).
-  const rows = rankStrategies([{ key: "you", short: "You", label: "You", results: res }, ...benches]);
+  const ch = S.challenger;
+  const chRow = ch ? [{ key: "challenger", short: ch.name, label: `${ch.name} (same tape)`, results: ch.results }] : [];
+  const rows = rankStrategies([{ key: "you", short: "You", label: "You", results: res }, ...chRow, ...benches]);
+  renderHeadToHead(rows);
   const you = rows.find((r) => r.key === "you");
   $("tRank").textContent = `${you.tiedWith.length ? "=" : ""}${you.overall} of ${rows.length}`;
   $("tRankSub").textContent = `Sharpe #${you.ranks.sharpe} · return/drawdown #${you.ranks.retToDD} · IRR #${you.ranks.irr}`;
@@ -486,9 +501,9 @@ function renderResults() {
     const x = r.results;
     const c = STRAT_COLORS[r.key];
     const sw = c ? `<span class="key" style="background:var(${c})"></span>` : `<span class="key"></span>`;
-    const name = r.key === "you" ? "You" : r.short;
+    const name = r.key === "you" ? "You" : esc(r.short);
     const rtd = x.busted || !Number.isFinite(x.retToDD) ? "–" : num(x.retToDD);
-    return `<tr class="${r.key === "you" ? "you" : ""}"><td class="num rank">${r.tiedWith.length ? "=" : ""}${r.overall}</td><td class="name" title="${r.label}">${sw}${name}</td>
+    return `<tr class="${r.key === "you" ? "you" : ""}"><td class="num rank">${r.tiedWith.length ? "=" : ""}${r.overall}</td><td class="name" title="${esc(r.label)}">${sw}${name}</td>
       <td class="num">${sharpeTxt(x)}${sup(r.ranks.sharpe)}</td><td class="num xs-hide">${rtd}${sup(r.ranks.retToDD)}</td>
       <td class="num">${pct(x.irr, 1, true)}${sup(r.ranks.irr)}</td><td class="num">${pct(-x.maxDrawdown, 1)}</td>
       <td class="num opt">${money(x.finalValue)}</td><td class="num opt ${signClass(x.totalReturn)}">${pct(x.totalReturn, 1, true)}</td>
@@ -498,6 +513,7 @@ function renderResults() {
   // Equity curves (time axis)
   const xs = res.dates.map(isoToSec);
   const lines = [{ key: "you", label: "You", eq: g.curve.equity }];
+  if (ch) lines.push({ key: "challenger", label: ch.name, eq: ch.game.curve.equity });
   for (const b of benches) if (STRAT_COLORS[b.key]) lines.push({ key: b.key, label: b.short, eq: b.game.curve.equity });
   for (const k of ["resEquity", "resDd", "resExp"]) if (S.charts[k]) { S.charts[k].destroy(); delete S.charts[k]; }
   const dateLabel = (v) => fmtDate(new Date(v * 1000).toISOString().slice(0, 10));
@@ -553,6 +569,84 @@ function renderResults() {
   $("copyMsg").textContent = "";
 }
 
+const esc = (t) => String(t).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+
+function renderHeadToHead(rows) {
+  const card = $("h2hCard");
+  const ch = S.challenger;
+  card.hidden = !ch;
+  if (!ch) return;
+  const you = rows.find((r) => r.key === "you");
+  const them = rows.find((r) => r.key === "challenger");
+  const metrics = [
+    { label: "Sharpe ratio", a: you.results.sharpe, b: them.results.sharpe, fmt: (v) => num(v), better: "high" },
+    { label: "Max drawdown", a: you.results.maxDrawdown, b: them.results.maxDrawdown, fmt: (v) => pct(-v, 1), better: "low" },
+    { label: "IRR", a: you.results.irr, b: them.results.irr, fmt: (v) => pct(v, 1, true), better: "high" },
+  ];
+  let wins = 0;
+  let losses = 0;
+  const body = metrics.map((m) => {
+    const a = Number.isFinite(m.a) ? m.a : -Infinity;
+    const b = Number.isFinite(m.b) ? m.b : -Infinity;
+    const youWin = m.better === "high" ? a > b + 1e-12 : a < b - 1e-12;
+    const theyWin = m.better === "high" ? b > a + 1e-12 : b < a - 1e-12;
+    wins += youWin ? 1 : 0;
+    losses += theyWin ? 1 : 0;
+    return `<tr><td>${m.label}</td><td class="num ${youWin ? "win" : ""}">${m.fmt(m.a)}</td><td class="num ${theyWin ? "win" : ""}">${m.fmt(m.b)}</td></tr>`;
+  }).join("");
+  const verdict = you.overall < them.overall ? `You win, placing ${you.overall} vs ${them.overall} overall.`
+    : you.overall > them.overall ? `${esc(ch.name)} wins, placing ${them.overall} vs your ${you.overall} overall.`
+      : `Dead heat: you both placed ${you.overall} overall.`;
+  $("h2hBody").innerHTML = `<p class="h2h-verdict">${verdict} <span class="muted">You took ${wins} of 3 judged metrics, ${esc(ch.name)} took ${losses}.</span></p>
+    <div class="table-wrap"><table class="score"><thead><tr><th>Metric</th><th class="num">You</th><th class="num">${esc(ch.name)}</th></tr></thead><tbody>${body}</tbody></table></div>`;
+}
+
+function challengeUrl() {
+  const raw = ($("challengeName").value || "").replace(/[^\p{L}\p{N} .'-]/gu, "").trim().slice(0, 20);
+  const cfg = { ...S.cfg, by: raw || "A friend" };
+  return `${location.origin}${location.pathname}#/challenge/${encodeReplay(cfg, S.actions)}`;
+}
+
+async function copyChallenge() {
+  const url = challengeUrl();
+  try {
+    await navigator.clipboard.writeText(url);
+    $("copyMsg").textContent = "Challenge link copied. Your friend gets the same blind tape, with your score hidden until they finish.";
+  } catch {
+    $("copyMsg").innerHTML = `Copy this link: <a href="${esc(url)}">${esc(url.slice(0, 60))}…</a>`;
+  }
+}
+
+async function openChallenge(code) {
+  const saved = { cfg: S.cfg, market: S.market, spyMarket: S.spyMarket, game: S.game, actions: S.actions, benchmarks: S.benchmarks, replay: S.replay, challenger: S.challenger };
+  try {
+    const { cfg, actions } = decodeReplay(code);
+    validateReplayCfg(cfg, actions);
+    const clean = typeof cfg.by === "string" ? cfg.by.replace(/[^\p{L}\p{N} .'-]/gu, "").trim().slice(0, 20) : "";
+    const name = clean || "A friend";
+    await setupGame({ ...cfg, by: undefined });
+    // Re-play the challenger's game on the same tape (hidden until the end).
+    const cg = new Game(S.market, { startIdx: S.game.startIdx, turns: S.game.turns });
+    for (const a of actions) {
+      if (cg.over) break;
+      if (!cg.check(a).ok) throw new Error("This challenge doesn't match the data (it may be from an older version).");
+      cg.play(a);
+    }
+    if (!cg.over) throw new Error("This challenge link is incomplete.");
+    S.challenger = { name, results: cg.results(), game: cg };
+    S.replay = false;
+    history.replaceState(null, "", "#/play");
+    show("game");
+    renderGame(true);
+  } catch (e) {
+    Object.assign(S, saved);
+    for (const k of Object.keys(S.charts)) { S.charts[k].destroy(); delete S.charts[k]; }
+    fatal(e, { quiet: true });
+    show("home");
+    renderResume();
+  }
+}
+
 function replayUrl() {
   const code = encodeReplay(S.cfg, S.actions);
   return `${location.origin}${location.pathname}#/replay/${code}`;
@@ -605,6 +699,7 @@ function validateReplayCfg(cfg, actions) {
   if (!Number.isInteger(cfg.startTurn) || cfg.startTurn < 0 || cfg.startTurn > fullTurns - cfg.turns) bad("bad start month");
   if (typeof cfg.end !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(cfg.end) || cfg.end > S.meta.as_of) bad("bad end date");
   if (!Array.isArray(actions) || actions.length > cfg.turns) bad("bad action list");
+  if (cfg.by !== undefined && (typeof cfg.by !== "string" || cfg.by.length > 20)) bad("bad name");
   cfg.blind = !!cfg.blind;
 }
 

@@ -124,6 +124,28 @@ try {
   check((await page2.textContent("#revealEyebrow")) === "Replay", "replay is labeled");
   await page2.close();
 
+  // Head-to-head challenge: link -> friend plays the same blind tape -> side-by-side ranking.
+  await page.fill("#challengeName", "Grant <b>");
+  await page.click("#challengeBtn");
+  const chUrl = await page.evaluate(() => navigator.clipboard.readText());
+  check(chUrl.includes("#/challenge/"), "challenge link copied");
+  const pc = await ctx.newPage();
+  pc.on("pageerror", (e) => errors.push(String(e)));
+  await pc.goto(chUrl);
+  await pc.waitForSelector("#screen-game:not([hidden])");
+  await pc.waitForSelector("#priceChart canvas");
+  check((await pc.textContent("#h2hBanner")).includes("Grant b played this exact tape"), "challenge banner names the (sanitized) challenger");
+  check((await pc.textContent("#priceTitle")) === "Mystery stock" && (await pc.textContent("#sTurn")).startsWith("1 of 12"), "friend starts the same blind tape at month 1");
+  await pc.click(".autopilot summary");
+  await pc.selectOption("#autoStrat", "trend200");
+  await pc.click("#autoRun");
+  await pc.waitForSelector("#h2hCard:not([hidden])");
+  check((await pc.textContent("#revealTitle")) === title, "friend's game reveals the same stock");
+  check((await pc.locator("#scoreTable tbody tr").count()) === 8, "scorecard ranks you, the challenger and 6 benchmarks");
+  check(/win|Dead heat/.test(await pc.textContent("#h2hBody")), "head-to-head verdict shown");
+  await pc.screenshot({ path: OUT + "12-challenge-results.png", fullPage: true });
+  await pc.close();
+
   // Full challenge via autopilot (covered call), open mode with a chosen ticker.
   await page.goto(`http://127.0.0.1:${PORT}/#/`);
   await page.click(".options-panel summary");
