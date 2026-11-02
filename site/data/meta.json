@@ -1,0 +1,116 @@
+{
+  "as_of": "2026-10-30",
+  "updated_at": "2026-11-02T01:41:19Z",
+  "stale": false,
+  "failures": {},
+  "series": {
+    "NVDA": {
+      "symbol": "NVDA",
+      "source": "yfinance",
+      "rows": 1757,
+      "first": "2019-11-04",
+      "last": "2026-10-30"
+    },
+    "INTC": {
+      "symbol": "INTC",
+      "source": "yfinance",
+      "rows": 1757,
+      "first": "2019-11-04",
+      "last": "2026-10-30"
+    },
+    "PYPL": {
+      "symbol": "PYPL",
+      "source": "yfinance",
+      "rows": 1757,
+      "first": "2019-11-04",
+      "last": "2026-10-30"
+    },
+    "MU": {
+      "symbol": "MU",
+      "source": "yfinance",
+      "rows": 1757,
+      "first": "2019-11-04",
+      "last": "2026-10-30"
+    },
+    "TSLA": {
+      "symbol": "TSLA",
+      "source": "yfinance",
+      "rows": 1757,
+      "first": "2019-11-04",
+      "last": "2026-10-30"
+    },
+    "KO": {
+      "symbol": "KO",
+      "source": "yfinance",
+      "rows": 1757,
+      "first": "2019-11-04",
+      "last": "2026-10-30"
+    },
+    "XOM": {
+      "symbol": "XOM",
+      "source": "yfinance",
+      "rows": 1757,
+      "first": "2019-11-04",
+      "last": "2026-10-30"
+    },
+    "CRWD": {
+      "symbol": "CRWD",
+      "source": "yfinance",
+      "rows": 1757,
+      "first": "2019-11-04",
+      "last": "2026-10-30"
+    },
+    "DIS": {
+      "symbol": "DIS",
+      "source": "yfinance",
+      "rows": 1757,
+      "first": "2019-11-04",
+      "last": "2026-10-30"
+    },
+    "UBER": {
+      "symbol": "UBER",
+      "source": "yfinance",
+      "rows": 1757,
+      "first": "2019-11-04",
+      "last": "2026-10-30"
+    },
+    "SPY": {
+      "symbol": "SPY",
+      "source": "yfinance",
+      "rows": 1757,
+      "first": "2019-11-04",
+      "last": "2026-10-30"
+    },
+    "VIX": {
+      "symbol": "^VIX",
+      "source": "yfinance",
+      "rows": 1759,
+      "first": "2019-11-04",
+      "last": "2026-10-30"
+    },
+    "IRX": {
+      "symbol": "^IRX",
+      "source": "yfinance",
+      "rows": 1757,
+      "first": "2019-11-04",
+      "last": "2026-10-30"
+    }
+  },
+  "pool": [
+    "NVDA",
+    "INTC",
+    "PYPL",
+    "MU",
+    "TSLA",
+    "KO",
+    "XOM",
+    "CRWD",
+    "DIS",
+    "UBER",
+    "SPY"
+  ],
+  "benchmark": "SPY",
+  "game_years": 5,
+  "repo": "cartermburke/FMKT256-AI-Proj",
+  "run_url": "https://github.com/cartermburke/FMKT256-AI-Proj/actions/runs/41373747048"
+}
