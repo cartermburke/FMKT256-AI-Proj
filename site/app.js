@@ -1569,7 +1569,7 @@ function renderHowNumbers(failed = false) {
     ["Benchmarks", `${Object.keys(STRATEGIES).length + 1}`, "Same prices, same costs"], // + the S&P 500's buy and hold
     ["Judged on", `${RANK_METRICS.length} metrics`, judged],
     ["Data through", m ? fmtDate(m.as_of) : "–",
-      m ? `${Object.keys(m.series).length} series, refreshed every weekday` : failed ? "The market data didn't load" : "Loading market data"],
+      m ? `${Object.keys(m.series).length} series, refreshed weekdays` : failed ? "The market data didn't load" : "Loading market data"],
   ];
   $("howNumbers").innerHTML = stats.map(([label, value, sub]) =>
     `<div class="how-stat"><dt>${label}</dt><dd class="how-stat-value num">${value}</dd><dd class="how-stat-sub">${sub}</dd></div>`).join("");

@@ -1257,7 +1257,7 @@ try {
       const page = getComputedStyle(document.body).backgroundColor;
       return { border: parseFloat(f.borderTopWidth), bg: f.backgroundColor, page };
     });
-    check(box.border >= 1 || box.bg !== box.page, `"Did you know?" boxes stand out from the page (border ${box.border}px, ${box.bg} on ${box.page})`);
+    check(box.border >= 1, `"Did you know?" boxes have a visible edge (border ${box.border}px, ${box.bg} on ${box.page})`);
     await p.click('[data-how-depth="full"]');
     await p.click("#howTerms");
     const f = await view();
@@ -1270,6 +1270,8 @@ try {
     check(r.open === r.folds && r.defsShown === r.defs && r.quick === "false" && r.terms === "true", "the reading view and Explain terms are remembered after a reload");
     const dash = await p.evaluate(() => /\u2014/.test(document.querySelector("#screen-how").innerText));
     check(!dash, "How it works has no em dashes");
+    const doubled = await p.evaluate(() => ([...document.querySelectorAll("#screen-how p:not(.formula), #screen-how li")].map((e) => e.innerText).join("\n").match(/\(\S[^()]*\([^()]*\)[^()]*\)|\)\s*\(/g) || []).map((s) => s.slice(0, 40)));
+    check(doubled.length === 0, `with Explain terms on, no definition sits in doubled brackets${doubled.length ? ": " + doubled.join(" | ") : ""}`);
     await c.close();
     // On a phone, with everything open, nothing scrolls sideways and the controls are 44px.
     const m = await fresh({ viewport: { width: 320, height: 640 }, isMobile: true, hasTouch: true });
@@ -1283,6 +1285,21 @@ try {
     }));
     check(ph.over <= 0 && ph.small === 0, `How it works on a 320px phone: no sideways scroll (${ph.over}px) and 44px controls (${ph.small} smaller)`);
     await m.c.close();
+    // The numbers strip doesn't move the page when the data arrives, at any width.
+    for (const w of [734, 744, 754, 1280]) {
+      const s = await fresh({ viewport: { width: w, height: 900 } });
+      let release;
+      const gate = new Promise((ok) => { release = ok; });
+      await s.p.route("**/data/meta.json", async (r) => { await gate; await r.continue(); });
+      await s.p.goto(`http://127.0.0.1:${PORT}/#/how`);
+      await s.p.waitForSelector("#screen-how:not([hidden])");
+      const before = await s.p.evaluate(() => document.querySelector("#howNumbers").getBoundingClientRect().height);
+      release();
+      await s.p.waitForFunction(() => /\d{4}/.test(document.querySelector("#howNumbers").textContent), null, { timeout: 4000 }).catch(() => {});
+      const after = await s.p.evaluate(() => document.querySelector("#howNumbers").getBoundingClientRect().height);
+      check(Math.abs(after - before) < 1, `at ${w}px the numbers strip keeps its height when the data arrives (${before} -> ${after})`);
+      await s.c.close();
+    }
     // In forced colors (high contrast) the chosen reading view keeps a readable label.
     const hc = await fresh({ forcedColors: "active" });
     await hc.p.goto(`http://127.0.0.1:${PORT}/#/how`);
