@@ -16,6 +16,7 @@ import { money, pct, num, signClass, fmtDate, fmtMonthYear, isoToSec, change, or
 const $ = (id) => document.getElementById(id);
 const TD = RULES.turnDays;
 const HISTORY_DAYS = 252; // a game's price chart starts a year before the game
+const HERO_MARGIN = 63; // the home sample ends this far before any game chart: links up to 3 months old
 const STRAT_COLORS = { you: "--s1", buyHold: "--s2", spy: "--s3", coveredCall: "--s4", protectivePut: "--s5", trend200: "--s6", challenger: "--s7" };
 // Benchmarks are muted and told apart by line pattern as well as color.
 const STRAT_DASH = { spy: [7, 4], coveredCall: [2, 3], protectivePut: [9, 3, 2, 3], trend200: [1, 4] };
@@ -453,9 +454,10 @@ function renderHomeMeta() {
 
 /**
  * The home page's sample tape is real: the S&P 500 ETF rebased to 100 like a blind game, over
- * months that end before the earliest day any current game's chart shows (a year before the
- * game window). The S&P 500 is in the blind pool, so the sample can't give away a game's future
- * or let a blind game be recognized. It stays an empty frame if the prices can't be loaded.
+ * months that end three months before the earliest day any game's chart shows (a year before
+ * the game window), so games from links up to three months old don't overlap it either. The
+ * S&P 500 is in the blind pool, so the sample can't give away a game's future or let a blind
+ * game be recognized. It stays an empty frame if the prices can't be loaded.
  */
 async function drawHeroTape() {
   let spy;
@@ -465,7 +467,7 @@ async function drawHeroTape() {
   const closes = spy.close || [];
   let last = dates.length - 1;
   while (last > 0 && dates[last] > m.as_of) last--;
-  const end = last - (m.game_years || 5) * 12 * TD - HISTORY_DAYS; // where the earliest game chart begins
+  const end = last - (m.game_years || 5) * 12 * TD - HISTORY_DAYS - HERO_MARGIN; // well before the earliest game chart
   const months = Math.min(24, Math.floor(end / TD));
   const start = end - months * TD;
   if (months < 6 || !(closes[start] > 0)) return;
@@ -573,12 +575,19 @@ function playAgain() {
 }
 
 async function setupGame(cfg) {
-  const bundle = await loadBundle(cfg.sym);
+  let bundle;
+  try {
+    bundle = await loadBundle(cfg.sym);
+  } catch (e) {
+    // The error names the price file; a blind game's must not name its stock.
+    if (cfg.blind) throw new Error("Couldn't load the prices for this game. Check your connection and try again.");
+    throw e;
+  }
   const market = buildMarket(bundle, { endDate: cfg.end });
   const spyMarket = buildMarket({ stock: bundle.spy, spy: bundle.spy, vix: bundle.vix, irx: bundle.irx }, { endDate: cfg.end });
   const fullStart = market.last - cfg.fullTurns * TD;
   const startIdx = fullStart + cfg.startTurn * TD;
-  if (fullStart < firstUsableIndex(market)) throw new Error(`Not enough history for ${cfg.sym}.`);
+  if (fullStart < firstUsableIndex(market)) throw new Error(`Not enough history for ${cfg.blind ? "this stock" : cfg.sym}.`);
   S.cfg = cfg;
   S.market = market;
   S.spyMarket = spyMarket;
@@ -1372,7 +1381,8 @@ async function attachChallenger(code) {
 async function openChallenge(code, seq = routeSeq) {
   // Opened from the game screen, the entry behind the link is that game's #/play: step back
   // onto it, so history never holds two #/play entries in a row (the first Back would do nothing).
-  const fromGame = S.screen === "game";
+  // Never on the entry the tab opened on: what is behind it isn't this page's.
+  const fromGame = S.screen === "game" && !history.state?.landing;
   // Back to the link of the challenge being played (it stays in history when the player moved
   // on while it loaded) carries on with that game instead of starting it again. A finished one
   // only does so from that leftover entry: opening its link again starts a new attempt.
@@ -1384,7 +1394,7 @@ async function openChallenge(code, seq = routeSeq) {
   }
   // Only one game is kept, so ask before a challenge replaces a game in progress (a damaged
   // link replaces nothing, so it goes straight to its error). On a No, go back to where the
-  // player was; on the entry the tab opened on, go home, with its Resume card.
+  // player was, or show home with its Resume card.
   let linkOk = true;
   try {
     const r = decodeLink(code, "challenge");
@@ -1392,8 +1402,11 @@ async function openChallenge(code, seq = routeSeq) {
   } catch { linkOk = false; }
   if (linkOk && !okToReplace("Open this challenge?")) {
     if (seq !== routeSeq) return;
-    if (!history.state?.landing) { history.back(); return; } // an entry this page added: one of its own is behind it
-    history.replaceState({ landing: true }, "", "#/");
+    // A link just opened here (no state yet): the page the player was on is behind it. The entry
+    // the tab opened on, or one already opened and reached again by Back or Forward, shows home
+    // in place.
+    if (!history.state) { history.back(); return; }
+    history.replaceState(history.state.landing ? { landing: true } : null, "", "#/");
     return routeNow(seq);
   }
   // Mark the entry, so Back to it (if the player moves on while it loads) is told apart from

@@ -939,17 +939,17 @@ try {
     await p.waitForSelector("#tapeDemo.ready", { timeout: 4000 }).catch(() => {});
     check((await p.textContent("#homeData")).startsWith("10 stocks and the S&P 500"), "home counts 10 stocks and the S&P 500");
     check((await p.textContent("#tapeName")) === "S&P 500 ETF (SPY)" && /^M0\.0 [\d.]+( L[\d.]+ [\d.]+){6,}$/.test(await p.getAttribute("#tapeDemo path", "d")), "the home page's sample tape is drawn from real prices");
-    // The S&P 500 is in the blind pool, so the sample ends before the earliest day any current
-    // game's chart shows (a year before the game window): it can't give a blind game away.
+    // The S&P 500 is in the blind pool, so the sample ends three months before the earliest day
+    // any game's chart shows (a year before the game window): it can't give a blind game away.
     const tape = await p.evaluate(async () => {
       const meta = await (await fetch("data/meta.json")).json();
       const spy = await (await fetch("data/prices/SPY.json")).json();
       let last = spy.dates.length - 1;
       while (spy.dates[last] > meta.as_of) last--;
       const mon = (iso) => new Date(`${iso}T12:00:00Z`).toLocaleDateString("en-US", { month: "short", year: "numeric", timeZone: "UTC" });
-      return { label: document.querySelector("#tapeMeta").textContent, win: mon(spy.dates[last - (meta.game_years || 5) * 12 * 21 - 252]) };
+      return { label: document.querySelector("#tapeMeta").textContent, win: mon(spy.dates[last - (meta.game_years || 5) * 12 * 21 - 252 - 63]) };
     });
-    check(/^[A-Z][a-z]{2} \d{4} to [A-Z][a-z]{2} \d{4}$/.test(tape.label) && tape.label.endsWith(` to ${tape.win}`), `the sample tape ends where the earliest game chart begins (${tape.label}; charts from ${tape.win})`);
+    check(/^[A-Z][a-z]{2} \d{4} to [A-Z][a-z]{2} \d{4}$/.test(tape.label) && tape.label.endsWith(` to ${tape.win}`), `the sample tape ends three months before the earliest game chart (${tape.label}; to ${tape.win})`);
     const tieRule = /equal averages go to the higher Sharpe( ratio)?, then the higher IRR/i;
     check(tieRule.test(await p.textContent("#scoreHelp")) && tieRule.test(await p.textContent("#screen-how")), "the scorecard help and How it works say how equal average ranks are ordered");
     await p.goto(`http://127.0.0.1:${PORT}/#/how`);
@@ -1029,6 +1029,51 @@ try {
     await p.waitForSelector("#resumeCard:not([hidden])", { timeout: 4000 }).catch(() => {});
     check(!(await p.isHidden("#resumeCard")) && (await p.textContent("#resumeText")).startsWith("Month 2 of 12"), "a damaged link opened over a replay still offers the saved game");
     await c.close();
+  });
+  await block(async () => {
+    // A tab opened on a challenge whose prices failed, then a game, then Back: the challenge
+    // opens there and the tab stays in the app. A blind game's error never names its stock.
+    const { c, p } = await fresh();
+    const full = linkOf({ v: 1, sym: "KO", end: "2026-10-30", fullTurns: 60, startTurn: 0, turns: 12, blind: true, seed: 1, mode: "quick", by: "Pat" }, Array(12).fill([100, ""]));
+    let failed = 0;
+    await p.route("**/data/prices/KO.json", (r) => (failed++ ? r.continue() : r.fulfill({ status: 503, body: "" })));
+    await p.goto(`http://127.0.0.1:${PORT}/#/challenge/${full}`);
+    await p.waitForSelector("#screen-home:not([hidden])");
+    await p.waitForFunction(() => document.querySelector("#staleBanner").textContent.length > 0, null, { timeout: 4000 }).catch(() => {});
+    const banner = await p.textContent("#staleBanner");
+    check(banner.includes("Couldn't load the prices for this game") && !/KO|Coca/.test(banner), `a blind game's load error doesn't name the stock (${banner.slice(0, 60)})`);
+    await p.click("#startQuick");
+    await p.waitForSelector("#priceChart canvas");
+    await p.goBack();
+    await p.waitForTimeout(1500);
+    const at = await p.evaluate(() => ({ url: location.href, game: !document.querySelector("#screen-game")?.hidden }));
+    check(at.url.endsWith("#/play") && at.game, `Back from a game onto the challenge the tab opened on stays in the app (${at.url.slice(-20)})`);
+    await c.close();
+    // Back onto a challenge that failed after Yes, then No: home shows in place, and Forward
+    // returns to the game with no more questions.
+    const f = await fresh();
+    await f.p.goto(`http://127.0.0.1:${PORT}/#/`);
+    await f.p.click("#startQuick");
+    await f.p.waitForSelector("#priceChart canvas");
+    await playMonths(f.p, 1);
+    await f.p.click(".brand");
+    await f.p.waitForSelector("#resumeCard:not([hidden])");
+    let once = 0;
+    await f.p.route("**/data/prices/KO.json", (r) => (once++ ? r.continue() : r.fulfill({ status: 503, body: "" })));
+    await f.p.goto(`http://127.0.0.1:${PORT}/#/challenge/${full}`);
+    await f.p.waitForFunction(() => document.querySelector("#staleBanner").textContent.length > 0, null, { timeout: 4000 }).catch(() => {});
+    await f.p.click("#resumeBtn");
+    await f.p.waitForSelector("#screen-game:not([hidden])");
+    const before = dialogs.length;
+    f.p.answer = false;
+    await f.p.goBack();
+    await f.p.waitForTimeout(800);
+    const back = await f.p.evaluate(() => location.hash);
+    await f.p.goForward();
+    await f.p.waitForTimeout(800);
+    const fwd = await f.p.evaluate(() => ({ hash: location.hash, turn: document.querySelector("#sTurn")?.textContent || "", game: !document.querySelector("#screen-game").hidden }));
+    check(back === "#/" && fwd.hash === "#/play" && fwd.game && fwd.turn.startsWith("2 of 12") && dialogs.length === before + 1, `No on a challenge reached by Back shows home, and Forward returns to the game (${back} -> ${fwd.hash} ${fwd.turn}, ${dialogs.length - before} question)`);
+    await f.c.close();
   });
   await block(async () => {
     // Once another tab has saved over this one's game, the game at stake is the saved one.
