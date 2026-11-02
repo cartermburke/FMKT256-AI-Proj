@@ -2,61 +2,81 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>Blind Tape</title>
   <meta name="description" content="A five-year stock and options trading challenge on real market data, scored on Sharpe ratio, maximum drawdown and IRR.">
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%232a78d6'/%3E%3Cpath d='M5 22l6-7 5 4 6-9 5 5' stroke='white' stroke-width='3' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%2311151c'/%3E%3Crect x='6' y='13' width='20' height='6' rx='1' fill='white'/%3E%3C/svg%3E">
+  <link rel="preload" href="vendor/fonts/public-sans-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="vendor/fonts/ibm-plex-mono-latin-500-normal.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="vendor/uPlot.min.css">
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
+  <a class="skip-link" href="#app">Skip to content</a>
   <header class="topbar">
     <a class="brand" href="#/" aria-label="Blind Tape home">
-      <svg viewBox="0 0 32 32" width="26" height="26" aria-hidden="true"><rect width="32" height="32" rx="7" class="brand-tile"/><path d="M5 22l6-7 5 4 6-9 5 5" stroke="#fff" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
-      <span>Blind Tape</span>
+      <span class="brand-mark" aria-hidden="true"><span></span></span>
+      <span class="brand-name">Blind Tape</span>
     </a>
-    <nav class="nav">
+    <nav class="nav" aria-label="Main">
       <a href="#/" data-nav="home">Play</a>
       <a href="#/how" data-nav="how">How it works</a>
       <a href="#/data" data-nav="data">Data</a>
-      <button class="theme-toggle" id="themeToggle" type="button" aria-label="Toggle dark mode" title="Toggle dark mode">
-        <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z" fill="currentColor"/></svg>
-      </button>
     </nav>
+    <button class="theme-toggle" id="themeToggle" type="button" aria-label="Switch to dark theme" aria-pressed="false">
+      <svg class="icon-moon" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z" fill="currentColor"/></svg>
+      <svg class="icon-sun" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><circle cx="12" cy="12" r="4.5" fill="currentColor"/><g stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 2v2.5M12 19.5V22M2 12h2.5M19.5 12H22M4.9 4.9l1.8 1.8M17.3 17.3l1.8 1.8M4.9 19.1l1.8-1.8M17.3 6.7l1.8-1.8"/></g></svg>
+    </button>
   </header>
 
-  <div id="staleBanner" class="banner warn" hidden></div>
+  <div id="staleBanner" class="banner" role="status" hidden></div>
 
-  <main id="app">
+  <main id="app" tabindex="-1">
     <!-- HOME -->
     <section id="screen-home" class="screen" hidden>
-      <div class="hero">
-        <p class="eyebrow">A five-year stock &amp; options challenge</p>
-        <h1>Five years. One stock. Its options.<br>No hindsight.</h1>
-        <p class="lede">You get <strong>$100,000</strong> and a stock drawn at random from real market history. Its name and dates are hidden and the price starts at 100, so you can't trade on what you remember. Each turn is one month: set your stock position, long or short, and trade one-month calls and puts. At the end the stock is revealed and you're scored on <strong>Sharpe ratio</strong>, <strong>maximum drawdown</strong> and <strong>IRR</strong> against six benchmark strategies played on the same data. Then send a friend a challenge link: they get the exact same blind tape, and you're ranked head-to-head.</p>
+      <div class="home-hero">
+        <div class="home-copy">
+          <h1>Trade one stock for five years without knowing which stock it is.</h1>
+          <p class="lede">Real prices, one month at a time, with calls and puts. The name comes off at the end.</p>
+        </div>
+        <figure class="tape-demo" aria-hidden="true">
+          <div class="tape-head">
+            <span class="tape-name"><span class="tape-redact"></span><span class="tape-reveal">Revealed at the end</span></span>
+            <span class="tape-meta num">Month 1 of 60</span>
+          </div>
+          <svg class="tape-line" viewBox="0 0 320 90" preserveAspectRatio="none">
+            <path d="M0 62 L18 58 L34 64 L52 50 L70 54 L88 41 L104 46 L122 33 L140 39 L158 30 L176 44 L194 37 L212 52 L230 45 L248 28 L266 34 L284 20 L302 26 L320 14" pathLength="1"/>
+          </svg>
+          <div class="tape-foot"><span>Price starts at 100</span><span class="num">$100,000</span></div>
+        </figure>
       </div>
 
-      <div class="resume card" id="resumeCard" hidden>
+      <div class="resume" id="resumeCard" hidden>
         <div><strong>Game in progress</strong><br><span class="muted small" id="resumeText"></span></div>
-        <button class="btn-primary" id="resumeBtn" type="button">Resume ▸</button>
+        <button class="btn-primary" id="resumeBtn" type="button">Resume</button>
+      </div>
+
+      <div class="blind-row">
+        <label class="switch">
+          <input type="checkbox" id="optBlind" checked>
+          <span class="switch-track" aria-hidden="true"></span>
+          <span><strong>Blind mode</strong> <span class="muted">hides the name and dates, and starts the price at 100</span></span>
+        </label>
       </div>
 
       <div class="mode-grid">
         <button class="mode-card" id="startFull" type="button">
           <span class="mode-title">Full challenge</span>
-          <span class="mode-sub">60 monthly turns, the most recent 5 years</span>
+          <span class="mode-sub">60 monthly turns: the most recent five years</span>
         </button>
         <button class="mode-card" id="startQuick" type="button">
           <span class="mode-title">Quick round</span>
-          <span class="mode-sub">12 monthly turns from a random point in the 5 years</span>
+          <span class="mode-sub">12 monthly turns from a random point in those five years</span>
         </button>
       </div>
 
       <details class="options-panel">
-        <summary>Game options</summary>
-        <div class="opt-row">
-          <label class="switch"><input type="checkbox" id="optBlind" checked> <span>Blind mode (hide ticker &amp; dates, rebase to 100)</span></label>
-        </div>
+        <summary>Pick a specific stock</summary>
         <div class="opt-row">
           <label for="optTicker">Stock</label>
           <select id="optTicker"><option value="">Random</option></select>
@@ -64,273 +84,337 @@
         </div>
       </details>
 
-      <div class="home-foot">
-        <p class="muted small" id="homeData">Loading market data…</p>
-      </div>
+      <p class="home-score small">Scored on Sharpe ratio, maximum drawdown and IRR against six benchmark strategies on the same prices. <a href="#/how">How it works</a></p>
+      <p class="muted small" id="homeData">Loading market data</p>
     </section>
 
     <!-- GAME -->
     <section id="screen-game" class="screen" hidden>
-      <div class="statusbar">
-        <div class="stat"><span class="stat-label">Month</span><span class="stat-value" id="sTurn">–</span></div>
-        <div class="stat"><span class="stat-label">Equity</span><span class="stat-value" id="sEquity">–</span></div>
-        <div class="stat"><span class="stat-label">Return</span><span class="stat-value" id="sReturn">–</span></div>
-        <div class="stat"><span class="stat-label">Stock exposure</span><span class="stat-value" id="sExposure">–</span></div>
-        <div class="stat"><span class="stat-label">Cash</span><span class="stat-value" id="sCash">–</span></div>
-        <div class="stat"><span class="stat-label">Implied vol</span><span class="stat-value" id="sIv">–</span></div>
-      </div>
       <div id="h2hBanner" class="h2h-banner" hidden></div>
-      <div id="turnToast" class="toast" role="status" aria-live="polite" hidden></div>
-
-      <div class="game-grid">
-        <div class="charts-col">
-          <div class="card">
-            <div class="card-head">
-              <h2 id="priceTitle">Mystery stock</h2>
-              <span class="muted small" id="priceSub">Price rebased to 100 at the start · 200-day average</span>
-            </div>
-            <div class="chart" id="priceChart"></div>
+      <div class="game-layout">
+        <section class="game-status" aria-label="Your account">
+          <div class="gs-main">
+            <span class="gs-label">Equity</span>
+            <span class="gs-big num" id="sEquity">–</span>
+            <span class="chg num" id="sReturn">–</span>
           </div>
-          <div class="card">
-            <div class="card-head">
-              <h2>Your account</h2>
-              <span class="muted small">Daily marked-to-market equity vs. simply holding the stock</span>
-            </div>
-            <div class="chart chart-short" id="equityChart"></div>
+          <div class="gs-month">
+            <span class="gs-label">Month</span>
+            <span class="gs-value num" id="sTurn">–</span>
+            <span class="rail" aria-hidden="true"><span id="sRail"></span></span>
           </div>
-        </div>
+          <div class="gs-item">
+            <span class="gs-label">Net exposure (stock + options)</span>
+            <span class="gs-value num" id="sExposure">–</span>
+          </div>
+          <div class="gs-item">
+            <span class="gs-label">Cash</span>
+            <span class="gs-value num" id="sCash">–</span>
+          </div>
+        </section>
 
-        <div class="ticket-col">
-          <div class="card ticket">
-            <h2>This month's orders</h2>
+        <section class="panel panel-price" aria-labelledby="priceTitle">
+          <div class="panel-head">
+            <div class="title-redact"><h2 id="priceTitle">Mystery stock</h2></div>
+            <p class="panel-sub" id="priceSub"></p>
+          </div>
+          <div class="chart chart-price" id="priceChart"></div>
+        </section>
 
-            <div class="field">
-              <div class="field-head">
-                <label for="stockSlider">Stock position</label>
-                <output id="stockOut">Keep current</output>
-              </div>
-              <input type="range" id="stockSlider" min="-100" max="150" step="5" value="0" aria-describedby="stockHint">
-              <div class="quick-btns" role="group" aria-label="Preset stock positions">
-                <button type="button" data-x="-100">Short 100%</button>
-                <button type="button" data-x="0">Flat</button>
-                <button type="button" data-x="50">Long 50%</button>
-                <button type="button" data-x="100">Long 100%</button>
-                <button type="button" data-x="150">Long 150%</button>
-              </div>
-              <p class="hint" id="stockHint">Percent of your equity. Long up to 150% (on margin), short up to 100%. Stock trades cost 5 bp.</p>
+        <section class="panel ticket" aria-labelledby="ticketTitle">
+          <h2 id="ticketTitle">This month's orders</h2>
+
+          <div class="field">
+            <div class="field-head">
+              <label for="stockSlider">Stock position</label>
+              <output id="stockOut" for="stockSlider">Keep current</output>
             </div>
-
-            <div class="field">
-              <div class="field-head">
-                <span class="label">One-month options</span>
-                <span class="muted small" id="optMeta">expire in 21 trading days</span>
-              </div>
-              <div class="table-wrap">
-                <table class="quotes" id="quotesTable" aria-label="Option quotes">
-                  <thead>
-                    <tr><th rowspan="2">Strike</th><th rowspan="2">IV</th><th colspan="2">Call</th><th colspan="2">Put</th></tr>
-                    <tr class="sub"><th>Bid</th><th>Ask</th><th>Bid</th><th>Ask</th></tr>
-                  </thead>
-                  <tbody></tbody>
-                </table>
-              </div>
-              <p class="hint">Premium per share. Click a <strong>bid</strong> to write (sell) that option or an <strong>ask</strong> to buy it, at the size chosen below. IV shows the volatility smile: puts are priced richer than calls.</p>
-              <div class="leg-builder">
-                <select id="legSide" aria-label="Buy or write"><option value="B">Buy</option><option value="W">Write</option></select>
-                <select id="legType" aria-label="Call or put"><option value="C">Call</option><option value="P">Put</option></select>
-                <select id="legStrike" aria-label="Strike"></select>
-                <select id="legSize" aria-label="Size as % of equity">
-                  <option value="0.1">on 10% of equity</option>
-                  <option value="0.25">on 25%</option>
-                  <option value="0.5">on 50%</option>
-                  <option value="1" selected>on 100%</option>
-                  <option value="1.5">on 150%</option>
-                  <option value="2">on 200%</option>
-                </select>
-                <button type="button" id="addLeg" class="btn-secondary">Add</button>
-              </div>
-              <ul class="legs" id="legsList"></ul>
+            <div class="slider-wrap">
+              <input type="range" id="stockSlider" min="-100" max="150" step="5" value="0" aria-describedby="stockHelp">
             </div>
-
-            <div class="preview" id="preview"></div>
-            <ul class="errors" id="errors" role="alert"></ul>
-
-            <button type="button" class="btn-primary" id="nextTurn">Next month ▸</button>
-
-            <details class="autopilot">
-              <summary>Autopilot</summary>
-              <p class="hint">Let a rule play the remaining months for you.</p>
-              <p class="hint" id="autoDesc"></p>
-              <div class="leg-builder">
-                <select id="autoStrat" aria-label="Autopilot strategy"></select>
-                <button type="button" id="autoRun" class="btn-secondary">Finish the game</button>
-              </div>
+            <div class="slider-scale" aria-hidden="true"><span>Short 100%</span><span class="zero">0</span><span>Long 150%</span></div>
+            <div class="quick-btns" role="group" aria-label="Preset stock positions">
+              <button type="button" id="keepBtn" class="keep">Keep current</button>
+              <button type="button" data-x="-100">Short 100%</button>
+              <button type="button" data-x="0">Flat</button>
+              <button type="button" data-x="50">Long 50%</button>
+              <button type="button" data-x="100">Long 100%</button>
+              <button type="button" data-x="150">Long 150%</button>
+            </div>
+            <details class="help">
+              <summary>How stock positions work</summary>
+              <p id="stockHelp">A percent of your equity. Long up to 150% (on margin), short up to 100%. Each stock trade costs 0.05% of the amount traded. If you leave this alone, your share count stays the same.</p>
             </details>
           </div>
+
+          <div class="field">
+            <div class="field-head">
+              <span class="label">One-month options</span>
+              <span class="muted small" id="optMeta"></span>
+            </div>
+            <div class="size-row">
+              <label for="legSize">Size of each option you add</label>
+              <select id="legSize">
+                <option value="0.1">10% of equity</option>
+                <option value="0.25">25% of equity</option>
+                <option value="0.5">50% of equity</option>
+                <option value="1" selected>100% of equity</option>
+                <option value="1.5">150% of equity</option>
+                <option value="2">200% of equity</option>
+              </select>
+            </div>
+            <p class="quote-peek" id="quotePeek" aria-hidden="true">Tap a price to trade.</p>
+            <div class="chain-wrap">
+              <table class="quotes" id="quotesTable" aria-label="Option quotes, premium per share">
+                <thead>
+                  <tr><th rowspan="2" scope="col">Strike</th><th rowspan="2" scope="col">Implied vol</th><th colspan="2" scope="colgroup">Call</th><th colspan="2" scope="colgroup">Put</th></tr>
+                  <tr class="sub"><th scope="col">Sell (bid)</th><th scope="col">Buy (ask)</th><th scope="col">Sell (bid)</th><th scope="col">Buy (ask)</th></tr>
+                </thead>
+                <tbody></tbody>
+              </table>
+            </div>
+            <div class="leg-builder" role="group" aria-label="Add an option with menus">
+              <select id="legSide" aria-label="Buy or write"><option value="B">Buy</option><option value="W">Write (sell)</option></select>
+              <select id="legType" aria-label="Call or put"><option value="C">Call</option><option value="P">Put</option></select>
+              <select id="legStrike" aria-label="Strike"></select>
+              <button type="button" id="addLeg" class="btn-secondary">Add</button>
+            </div>
+            <details class="help">
+              <summary>How options work here</summary>
+              <p>Each option expires at the end of the month (21 trading days) and settles in cash. Selling at the bid writes the option; buying at the ask buys it. Written calls must be covered by shares you hold, and written puts need cash equal to the strike value. Implied vol rises for lower strikes: puts are priced richer than calls. In-the-money prices are shaded.</p>
+            </details>
+            <ul class="legs" id="legsList"></ul>
+          </div>
+
+          <div class="preview" id="preview"></div>
+          <ul class="errors" id="errors" role="alert"></ul>
+
+          <details class="autopilot">
+            <summary>Autopilot</summary>
+            <p class="hint">Let a rule play the remaining months for you.</p>
+            <p class="hint" id="autoDesc"></p>
+            <div class="leg-builder">
+              <select id="autoStrat" aria-label="Autopilot strategy"></select>
+              <button type="button" id="autoRun" class="btn-secondary">Finish the game</button>
+            </div>
+          </details>
+        </section>
+
+        <section class="panel panel-account" aria-labelledby="accountTitle">
+          <div class="panel-head">
+            <h2 id="accountTitle">Your account</h2>
+            <p class="panel-sub">Daily value of your account next to simply holding the stock</p>
+          </div>
+          <p class="empty" id="equityEmpty">Your account line starts after month 1.</p>
+          <div class="chart chart-account" id="equityChart"></div>
+        </section>
+      </div>
+
+      <div class="actionbar" id="actionBar">
+        <div class="ab-inner">
+          <div class="ab-text">
+            <span class="ab-status num"><span id="abMonth"></span><span class="ab-sep" aria-hidden="true"> · </span><span id="abEquity"></span></span>
+            <div id="turnToast" class="beat" role="status" aria-live="polite" hidden></div>
+          </div>
+          <button type="button" class="btn-primary btn-go" id="nextTurn">Next month</button>
         </div>
       </div>
     </section>
 
     <!-- RESULTS -->
     <section id="screen-results" class="screen" hidden>
-      <div class="reveal">
-        <p class="eyebrow" id="revealEyebrow">The tape is revealed</p>
-        <h1 id="revealTitle">–</h1>
-        <p class="lede" id="revealSub">–</p>
+      <div class="reveal" id="revealBlock">
+        <p class="reveal-eyebrow" id="revealEyebrow">The tape is revealed</p>
+        <div class="reveal-title"><h1 id="revealTitle">–</h1><span class="redact-bar" aria-hidden="true"></span></div>
+        <p class="reveal-dates num" id="revealDates"><span class="cover" aria-hidden="true"></span><span id="revealDatesText"></span></p>
+        <p class="reveal-vs" id="revealSub">–</p>
+        <div class="chart chart-reveal" id="revealChart"></div>
+        <button type="button" class="link-btn reveal-skip" id="revealSkip" hidden>Skip</button>
       </div>
 
-      <div class="card h2h" id="h2hCard" hidden>
-        <div class="card-head"><h2>Head-to-head</h2><span class="muted small">Same stock, same months, same prices</span></div>
-        <div id="h2hBody"></div>
+      <div class="verdict" id="verdictBlock">
+        <p class="verdict-line" id="verdict"></p>
+        <div class="versus" id="versusNote"></div>
       </div>
+
+      <div class="actions-row results-actions">
+        <div class="challenge-group">
+          <input type="text" id="challengeName" maxlength="20" placeholder="Your name (optional)" aria-label="Your name for the challenge link">
+          <button type="button" class="btn-primary" id="challengeBtn">Challenge a friend</button>
+        </div>
+        <button type="button" class="btn-secondary" id="copyReplay">Copy replay link</button>
+        <button type="button" class="btn-secondary" id="playAgain">Play again</button>
+        <span class="muted small copy-msg" id="copyMsg" aria-live="polite"></span>
+      </div>
+
+      <section class="block h2h" id="h2hCard" hidden>
+        <div class="block-head"><h2>Head-to-head</h2><span class="muted small">Same stock, same months, same prices</span></div>
+        <div id="h2hBody"></div>
+      </section>
 
       <div class="tiles">
-        <div class="tile"><span class="tile-label">Overall rank</span><span class="tile-value" id="tRank">–</span><span class="tile-sub" id="tRankSub"></span></div>
-        <div class="tile"><span class="tile-label">Sharpe ratio</span><span class="tile-value" id="tSharpe">–</span><span class="tile-sub" id="tSharpeSub"></span></div>
-        <div class="tile"><span class="tile-label">Max drawdown</span><span class="tile-value" id="tMdd">–</span><span class="tile-sub" id="tMddSub"></span></div>
-        <div class="tile"><span class="tile-label">IRR (annualized)</span><span class="tile-value" id="tIrr">–</span><span class="tile-sub" id="tIrrSub"></span></div>
-        <div class="tile"><span class="tile-label">Ending value</span><span class="tile-value" id="tFinal">–</span><span class="tile-sub" id="tFinalSub"></span></div>
+        <div class="tile tile-rank"><span class="tile-label">Overall place</span><span class="tile-value" id="tRank">–</span><span class="tile-sub" id="tRankSub"></span></div>
+        <div class="tile"><span class="tile-label">Sharpe ratio</span><span class="tile-value num" id="tSharpe">–</span><span class="tile-sub" id="tSharpeSub"></span></div>
+        <div class="tile"><span class="tile-label">Max drawdown</span><span class="tile-value num" id="tMdd">–</span><span class="tile-sub" id="tMddSub"></span></div>
+        <div class="tile"><span class="tile-label">IRR (per year)</span><span class="tile-value num" id="tIrr">–</span><span class="tile-sub" id="tIrrSub"></span></div>
+        <div class="tile"><span class="tile-label">Ending value</span><span class="tile-value num" id="tFinal">–</span><span class="tile-sub" id="tFinalSub"></span></div>
       </div>
 
-      <div class="card">
-        <div class="card-head"><h2>Scorecard</h2><span class="muted small">Ordered by the average of three ranks (the small #): Sharpe, return per unit of drawdown (IRR above T-bills ÷ max drawdown), and IRR. Every strategy pays the same costs on the same data. “=” marks a tie.</span></div>
+      <section class="card block">
+        <div class="block-head">
+          <h2>Scorecard</h2>
+          <details class="help help-inline" id="scoreHelp">
+            <summary aria-label="How the scorecard is ranked">?</summary>
+            <p>Every strategy is ranked on three numbers and ordered by the average of those ranks: Sharpe ratio, return per unit of drawdown (IRR above T-bills divided by max drawdown), and IRR. The small chip beside each value is its rank. Exact ties share a place. Every strategy pays the same costs on the same prices.</p>
+          </details>
+        </div>
         <div class="table-wrap">
           <table class="score" id="scoreTable">
             <thead><tr>
-              <th class="num">#</th><th>Strategy</th><th class="num">Sharpe</th><th class="num xs-hide" title="IRR above T-bills ÷ max drawdown">Ret/DD</th><th class="num">IRR</th><th class="num">Max DD</th>
-              <th class="num opt">Ending value</th><th class="num opt">Total return</th><th class="num opt">Sortino</th><th class="num opt">Volatility</th><th class="num opt">Beta</th>
+              <th class="num" scope="col">Place</th><th scope="col">Strategy</th><th class="num" scope="col">Sharpe</th><th class="num xs-hide" scope="col" title="IRR above T-bills divided by max drawdown">Return per drawdown</th><th class="num" scope="col">IRR</th><th class="num" scope="col">Max drawdown</th>
+              <th class="num opt" scope="col">Ending value</th><th class="num opt" scope="col">Total return</th><th class="num opt" scope="col">Sortino</th><th class="num opt" scope="col">Volatility</th><th class="num opt" scope="col">Beta</th>
             </tr></thead>
             <tbody></tbody>
           </table>
         </div>
-      </div>
+      </section>
 
-      <div class="card">
-        <div class="card-head"><h2>Growth of $100,000</h2><span class="muted small" id="resEquitySub"></span></div>
-        <div class="chart" id="resEquityChart"></div>
-      </div>
+      <section class="block">
+        <div class="block-head"><h2>Growth of $100,000</h2><span class="muted small" id="resEquitySub"></span></div>
+        <div class="chart chart-growth" id="resEquityChart"></div>
+      </section>
       <div class="two-col">
-        <div class="card">
-          <div class="card-head"><h2>Drawdown</h2><span class="muted small">Decline from the running peak</span></div>
+        <section class="block">
+          <div class="block-head"><h2>Drawdown</h2><span class="muted small">How far below its own peak each account fell</span></div>
           <div class="chart chart-short" id="resDdChart"></div>
-        </div>
-        <div class="card">
-          <div class="card-head"><h2>Your net exposure by month</h2><span class="muted small">Stock plus option delta · long above zero, short below</span></div>
+        </section>
+        <section class="block">
+          <div class="block-head"><h2>Your net exposure by month</h2><span class="muted small">Stock plus option delta; long above zero, short below</span></div>
+          <p class="empty" id="expEmpty" hidden>You stayed in cash every month, so there is nothing to plot.</p>
           <div class="chart chart-short" id="resExpChart"></div>
-        </div>
+        </section>
       </div>
 
-      <div class="card">
-        <div class="card-head"><h2>Coach's debrief</h2></div>
+      <section class="block">
+        <div class="block-head"><h2>Coach's debrief</h2></div>
         <div id="coachNotes" class="coach"></div>
-      </div>
+      </section>
 
-      <details class="card">
+      <details class="block log">
         <summary><h2 class="inline">Month-by-month log</h2></summary>
         <div class="table-wrap">
           <table class="score small" id="logTable">
-            <thead><tr><th>Month</th><th class="num">Stock move</th><th class="num" title="Stock plus option delta">Net exposure</th><th>Options</th><th class="num">Option P&amp;L</th><th class="num">Your return</th><th class="num">Equity</th></tr></thead>
+            <thead><tr><th scope="col">Month</th><th class="num" scope="col">Stock move</th><th class="num" scope="col" title="Stock plus option delta">Net exposure</th><th scope="col">Options</th><th class="num" scope="col">Option P&amp;L</th><th class="num" scope="col">Your return</th><th class="num" scope="col">Equity</th></tr></thead>
             <tbody></tbody>
           </table>
         </div>
       </details>
-
-      <div class="actions-row">
-        <button type="button" class="btn-primary" id="playAgain">Play again</button>
-        <button type="button" class="btn-secondary" id="copyReplay">Copy replay link</button>
-        <input type="text" id="challengeName" maxlength="20" placeholder="Your name (optional)" aria-label="Your name for the challenge link">
-        <button type="button" class="btn-secondary" id="challengeBtn">Challenge a friend</button>
-        <span class="muted small" id="copyMsg" aria-live="polite"></span>
-      </div>
     </section>
 
     <!-- HOW IT WORKS -->
     <section id="screen-how" class="screen prose" hidden>
       <h1>How it works</h1>
-      <p class="lede">Blind Tape is a trading game built on real daily market data. The rules are simple enough to learn in a minute, and the scoring uses the same risk-adjusted metrics a portfolio manager would be judged on.</p>
+      <p class="lede">A trading game on real daily prices, scored the way a portfolio manager is judged.</p>
+      <nav class="toc" aria-label="On this page">
+        <a href="#/how" data-jump="how-turn">A turn</a>
+        <a href="#/how" data-jump="how-rules">Rules</a>
+        <a href="#/how" data-jump="how-options">Option pricing</a>
+        <a href="#/how" data-jump="how-scoring">Scoring</a>
+        <a href="#/how" data-jump="how-bench">Benchmarks</a>
+        <a href="#/how" data-jump="how-challenge">Challenges</a>
+        <a href="#/how" data-jump="how-data">Data</a>
+        <a href="#/how" data-jump="how-limits">Limits</a>
+      </nav>
 
-      <h2>The game</h2>
+      <h2 id="how-turn">A turn</h2>
+      <figure class="turn-diagram">
+        <svg viewBox="0 0 640 150" role="img" aria-labelledby="turnDiagTitle">
+          <title id="turnDiagTitle">One turn: you place orders at the month's first close, the month plays out day by day, options expire, and the next month starts.</title>
+          <g class="td-box"><rect x="4" y="30" width="150" height="74" rx="8"/><text x="79" y="58">You decide</text><text x="79" y="80" class="td-sub">stock + options</text></g>
+          <g class="td-box"><rect x="186" y="30" width="190" height="74" rx="8"/><text x="281" y="58">21 trading days</text><text x="281" y="80" class="td-sub">marked to market daily</text></g>
+          <g class="td-box"><rect x="408" y="30" width="110" height="74" rx="8"/><text x="463" y="58">Options</text><text x="463" y="80" class="td-sub">expire in cash</text></g>
+          <g class="td-box td-end"><rect x="550" y="30" width="86" height="74" rx="8"/><text x="593" y="58">Next</text><text x="593" y="80" class="td-sub">month</text></g>
+          <g class="td-arrows"><path d="M156 67h26M378 67h26M520 67h26"/></g>
+          <text x="281" y="132" class="td-note">A margin check runs at every daily close</text>
+        </svg>
+      </figure>
+
+      <h2 id="how-rules">Rules</h2>
       <ul>
-        <li><strong>Stake:</strong> $100,000, fixed. No deposits or withdrawals.</li>
-        <li><strong>The stock:</strong> drawn at random from a pool of stocks with very different histories (moonshots, decliners, cyclicals, defensives, and the S&amp;P 500 itself). In blind mode the ticker and calendar dates are hidden and the price is rebased to 100 on day one; returns are unchanged.</li>
-        <li><strong>Window:</strong> the full challenge covers the most recent 60 months (1,260 trading days) ending at the latest close in the data. A quick round is a 12-month slice of that window. Each turn is exactly 21 trading days.</li>
-        <li><strong>Stock position:</strong> set as a percent of equity, from −100% (short) to +150% (long on margin). Stock trades cost 5 basis points. If you don't touch the slider, your share count is unchanged.</li>
-        <li><strong>Options:</strong> European calls and puts at 90/95/100/105/110% of the current price, expiring at the end of the month (21 trading days), cash-settled at intrinsic value. Size is a percent of equity notional (e.g. "size 100%" = options on as many shares as your equity would buy). Up to four legs per month, and at most 200% of equity notional across all legs.</li>
-        <li><strong>Leverage cap includes options:</strong> your <em>net</em> exposure, meaning the stock plus the delta of every option leg, must stay between −100% and +150% when you place an order. Options can't be used to get around the stock limits.</li>
-        <li><strong>Writing options:</strong> written calls must be covered by long shares. Written puts must be cash-secured: after the whole order you need cash at least equal to the strike value, not counting short-sale proceeds.</li>
-        <li><strong>Financing:</strong> idle cash (including short-sale proceeds) earns the 13-week T-bill yield (^IRX) daily. Margin debit pays T-bill + 1.5%. Short positions pay a 0.5%/yr borrow fee. An order can't take borrowing above 50% of equity.</li>
-        <li><strong>Drift and risk controls:</strong> the limits above apply to orders. Between orders, positions drift with the market. You can always keep a drifted position or bring the stock back within the limits, but buying options still needs buying power. The account is marked to market at every daily close, including option-expiry days. If equity falls below 25% of the gross stock position, a margin call liquidates the stock and closes all options. If equity hits zero, the game is over, the rest of the window counts as zero, and the account ranks last.</li>
+        <li><strong>Stake.</strong> $100,000, fixed. No deposits or withdrawals.</li>
+        <li><strong>The stock.</strong> Drawn at random from a pool with very different histories, including the S&amp;P 500 itself. In blind mode the name and dates are hidden and the price starts at 100; returns are unchanged.</li>
+        <li><strong>Window.</strong> The full challenge is the most recent 60 months (1,260 trading days) ending at the latest close. A quick round is a 12-month slice. Each turn is 21 trading days.</li>
+        <li><strong>Stock.</strong> A percent of equity, from −100% (short) to +150% (long on margin). Each trade costs 0.05% of the amount traded. Leave it alone and your share count stays the same.</li>
+        <li><strong>Options.</strong> European calls and puts at 90, 95, 100, 105 and 110% of the price, expiring at the end of the month and settled in cash. Size is a percent of equity. Up to four a month, 200% of equity at most in total.</li>
+        <li><strong>Leverage includes options.</strong> Net exposure, the stock plus each option's delta, must stay between −100% and +150% when you place an order.</li>
+        <li><strong>Writing options.</strong> Written calls must be covered by shares. Written puts need cash equal to the strike value after the whole order, not counting short-sale proceeds.</li>
+        <li><strong>Financing.</strong> Cash earns the 13-week T-bill rate. Borrowing pays T-bill + 1.5%, shorts pay 0.5% a year, and an order can't take borrowing above 50% of equity.</li>
+        <li><strong>Drift and margin.</strong> Limits apply to orders; between orders positions drift. Below 25% of the gross stock position, a margin call sells everything. At zero equity the game ends and the account ranks last.</li>
       </ul>
 
-      <h2>Head-to-head challenges</h2>
-      <p>After a game, <strong>Challenge a friend</strong> copies a link that holds your stock, your window and every order you placed, compressed into the URL, so no server or login is involved. Your friend plays the same blind tape from month 1 without seeing your result. When they finish, the engine replays your orders on the same prices and ranks you side by side, together with the six benchmarks. They can then challenge you back.</p>
+      <h2 id="how-options">Option pricing</h2>
+      <p>There are no free historical option quotes for every stock, so options are priced with Black-Scholes on an implied volatility built from that day's market data:</p>
+      <p class="formula num">IV<sub>atm</sub>² = RV<sub>63</sub>(stock)² + [ (0.88 × VIX/100)² − RV<sub>63</sub>(S&amp;P 500)² ]</p>
+      <p class="formula num">IV(K) = IV<sub>atm</sub> × (1 − slope × ln(K/S))</p>
+      <p>The bracket is the market's volatility risk premium that day. Adding it once prices at-the-money S&amp;P 500 options at 0.88 × VIX and gives single stocks a small premium over their own realized volatility. A smile then makes lower strikes richer.</p>
+      <details class="help">
+        <summary>The details</summary>
+        <p>RV<sub>63</sub> is trailing 63-day realized volatility. The VIX is a variance-swap level that includes the skew, so at-the-money index volatility is taken as 0.88 × VIX. The index smile has slope 3.0 on both sides; single stocks get 1.25 below the money and a flat call wing, because out-of-the-money stock calls aren't cheap in real markets. Each smile is clipped to between 0.5 and 2 times at-the-money volatility; at-the-money volatility is floored at 75% of realized; every IV stays between 8% and 250%. You buy at the ask and sell at the bid: a half-spread of 2.5% of the premium, at least 0.05% of the stock price. The risk-free rate is the T-bill yield, and because prices include dividends, the stock is treated as paying none.</p>
+        <p>Three earlier versions were replaced after reality checks on real data: one made covered calls beat buy and hold on almost every stock; one let a 5%-out-of-the-money S&amp;P 500 covered call beat the index by 46 points; one made out-of-the-money stock calls so cheap that call buyers profited even after delta hedging. With this version, delta-hedged buyers of out-of-the-money stock options lose on average, as the evidence says they should, and the S&amp;P 500 buy-write finishes within about 5 points of the index (+83% vs +78%).</p>
+      </details>
 
-      <h2>Option pricing</h2>
-      <p>Historical option quotes for every stock aren't freely available, so options are priced with Black-Scholes on an implied volatility built from market data on each day:</p>
-      <p class="formula">IV<sub>atm</sub>² = RV<sub>63</sub>(stock)² + [ (0.88 × VIX/100)² − RV<sub>63</sub>(S&amp;P 500)² ]</p>
-      <p class="formula">IV(K) = IV<sub>atm</sub> × (1 − skew × ln(K/S))</p>
-      <p>RV<sub>63</sub> is trailing 63-day realized volatility. The bracket is the market's <em>variance risk premium</em> on that day: how much option buyers pay for S&amp;P 500 volatility above what the index has actually been delivering. The VIX is a variance-swap level that includes the skew, so at-the-money index vol is taken as 0.88 × VIX. Adding the premium once, in variance units, prices at-the-money SPY options at 0.88 × VIX, and gives single stocks a small premium over their own realized vol. That is consistent with research showing the volatility risk premium is concentrated in index options. A smile is then applied across strikes. For the index the skew is steep and runs one way (slope 3.0), so puts are richer and calls cheaper. For single stocks the puts get a milder skew (1.25) and the calls stay at at-the-money vol, because out-of-the-money stock calls aren't cheap in real markets. Each smile is clipped to between 0.5× and 2× at-the-money vol. At-the-money vol is floored at 75% of the stock's realized vol, and every IV is kept between 8% and 250%. You buy at the ask and sell at the bid: a half-spread of 2.5% of the premium, with a minimum of 5 bp of the stock price. The risk-free rate is the T-bill yield. Because the price series is total-return adjusted, the model treats the stock as non-dividend-paying.</p>
-      <p><strong>How we got here.</strong> Each version below was replaced after a reality check on real data.</p>
-      <ol>
-        <li>Multiplying each stock's realized vol by the index's VIX-to-realized ratio made covered calls beat buy-and-hold on almost every stock.</li>
-        <li>Pricing every strike at the VIX level let a 5%-out-of-the-money SPY covered call beat SPY by 46 percentage points over five years.</li>
-        <li>Applying the index-style smile to single stocks made their out-of-the-money calls too cheap, so call buyers profited even after delta hedging.</li>
-      </ol>
-      <p>With the current model, delta-hedged buyers of out-of-the-money single-stock options lose on average, as the empirical evidence says they should. The SPY 105% buy-write finishes within about 5 points of SPY over the full window (+83% vs +78%), down from 46.</p>
-
-      <h2>Scoring</h2>
+      <h2 id="how-scoring">Scoring</h2>
       <ul>
-        <li><strong>Sharpe ratio:</strong> mean daily return in excess of the T-bill rate ÷ its standard deviation, × √252.</li>
-        <li><strong>Sortino ratio:</strong> the same excess return ÷ downside deviation, × √252.</li>
-        <li><strong>Maximum drawdown:</strong> the largest peak-to-trough decline of the daily equity curve.</li>
-        <li><strong>IRR:</strong> the money-weighted internal rate of return (XIRR, actual/365) of the account's cash flows. With a fixed stake there are only two flows (the $100,000 in and the ending value out), so IRR equals the compound annual growth rate. The engine computes a general XIRR so contributions could be added later.</li>
-        <li><strong>Beta:</strong> covariance of your daily returns with SPY's, ÷ SPY's variance.</li>
-        <li><strong>Return per unit of drawdown:</strong> IRR in excess of the T-bill return ÷ maximum drawdown (a Calmar-style ratio), with the drawdown floored at 1%.</li>
-        <li><strong>Overall rank:</strong> the assignment judges on Sharpe, maximum drawdown <em>and</em> IRR. Every strategy is ranked on Sharpe, on return per unit of drawdown, and on IRR, and ordered by the average of the three ranks; exact ties share a rank. Max drawdown enters per unit of return, not raw. Raw drawdown shrinks with position size while Sharpe doesn't, so a tiny near-cash position (say, writing a few puts) would otherwise collect two good ranks for free. Sharpe alone also misorders some cases: a near-riskless account that trails T-bills slightly has a tiny negative excess return divided by a tiny volatility. A busted account has no meaningful Sharpe and ranks last.</li>
+        <li><strong>Sharpe ratio.</strong> Mean daily return above the T-bill rate, divided by its standard deviation, × √252.</li>
+        <li><strong>Maximum drawdown.</strong> The largest fall from a peak in the daily account value.</li>
+        <li><strong>IRR.</strong> The money-weighted return per year (XIRR). With a fixed stake it equals the compound annual growth rate.</li>
+        <li><strong>Return per unit of drawdown.</strong> IRR above T-bills divided by max drawdown (floored at 1%).</li>
+        <li><strong>Overall place.</strong> Each strategy is ranked on Sharpe, return per unit of drawdown, and IRR, and ordered by the average rank; exact ties share a place. Drawdown enters per unit of return, so a tiny position can't win just by being small. A wiped-out account ranks last.</li>
+        <li><strong>Also shown.</strong> Sortino ratio (excess return over downside deviation), volatility, and beta against the S&amp;P 500.</li>
       </ul>
 
-      <h2>Benchmarks</h2>
-      <p>Every game is also played automatically by six benchmark strategies on the same window, with the same costs: <strong>buy &amp; hold</strong> the stock; <strong>buy &amp; hold the S&amp;P 500</strong> (SPY); a <strong>covered call</strong> (long 100%, write 105% calls monthly); a <strong>protective put</strong> (long 100%, buy 95% puts monthly); a <strong>200-day trend</strong> rule (long 100% when the price is above its 200-day average, otherwise T-bills); and <strong>T-bills</strong> only.</p>
+      <h2 id="how-bench">Benchmarks</h2>
+      <p>Six strategies play the same window with the same costs: buy and hold the stock; buy and hold the S&amp;P 500; a covered call (long 100%, write 105% calls monthly); a protective put (long 100%, buy 95% puts monthly); a 200-day trend rule (long above the 200-day average, otherwise T-bills); and T-bills only.</p>
 
-      <h2>Data &amp; updates</h2>
-      <p>Daily dividend- and split-adjusted closes for every stock, SPY, the VIX and the 13-week T-bill yield are downloaded by a scheduled GitHub Actions job every weekday after the US close. The job validates each series (no gaps or non-finite values, plausible ranges, enough history), commits only when the data changed, and redeploys the site. Because the game window always ends at the latest close, it moves forward automatically as new data arrives. Adding a stock means adding one line to <code>config/tickers.json</code>: the next run downloads its full history with no code changes. See the <a href="#/data">Data</a> page for the current status.</p>
+      <h2 id="how-challenge">Head-to-head challenges</h2>
+      <p>After a game, <strong>Challenge a friend</strong> copies a link that holds your stock, your window and every order you placed, so no server or login is involved. Your friend plays the same blind tape from month 1 without seeing your result. When they finish, the engine replays your orders on the same prices and ranks you side by side, with the six benchmarks. They can challenge you back.</p>
 
-      <h2>Verification</h2>
-      <p>The engine has unit tests: Black-Scholes against textbook values and put-call parity, margin calls, short squeezes, option settlement, the covered and cash-secured rules, and the Sharpe/Sortino/drawdown/XIRR math. A separate Python script independently recomputes every metric from the real equity curves of all benchmark strategies on all stocks, using pandas, and checks it against the browser's numbers.</p>
+      <h2 id="how-data">Data and updates</h2>
+      <p>Daily dividend- and split-adjusted closes for every stock, the S&amp;P 500 ETF, the VIX and the 13-week T-bill yield are downloaded by a scheduled GitHub Actions job each weekday after the close. It validates every series and commits only real changes, and the site redeploys. The game window always ends at the latest close. Adding a stock is one line in <code>config/tickers.json</code>. See the <a href="#/data">Data</a> page for current status.</p>
+      <p>The engine has unit tests (Black-Scholes against textbook values and put-call parity, margin calls, settlement, the trading rules and every metric), and a separate pandas script recomputes every metric on real data and checks it against the browser.</p>
 
-      <h2>Limitations</h2>
+      <h2 id="how-limits">Limits</h2>
       <ul>
-        <li>Option prices are model prices, not historical quotes. The smile is a simple two-parameter shape (one skew for the index, one for all single stocks), not fitted to each stock's real option market, and earnings-day volatility isn't modelled.</li>
-        <li>Trades execute at the daily close. There are no intraday stops, and decisions are monthly.</li>
-        <li>Fractional shares are allowed, and the market impact of trades is ignored beyond the fixed costs.</li>
-        <li>Pre-start history shown on the chart starts up to a year before the game begins. In blind mode the stock's identity can sometimes be inferred from the shape of its chart, or from the era revealed by the T-bill rate. Blind mode is honour-based: a static site has to download the price file, so a player who opens the browser's developer tools can see it.</li>
-        <li>Replay links reproduce a game exactly on the same data snapshot. When the data provider revises adjusted prices (e.g. after a dividend), a replay can differ by a few dollars.</li>
+        <li>Option prices are model prices, not historical quotes; the smile is a simple shape and earnings days aren't modelled.</li>
+        <li>Trades fill at the daily close, decisions are monthly, fractional shares are allowed, and market impact is ignored beyond the fixed costs.</li>
+        <li>Blind mode is honor-based: a careful look at the chart's shape or the T-bill rate can hint at the stock or era, and the browser's developer tools can show the price file.</li>
+        <li>Replay links reproduce a game exactly on the same data. If the provider revises adjusted prices, a replay can differ by a few dollars.</li>
       </ul>
 
       <h2>About</h2>
-      <p>Built for Duke's FMKT 256 (Fall 2026) AI extra-credit project with Claude (Anthropic) as the AI pair-programmer: game design, engine, tests, data pipeline and this site. Source code: <a id="repoLink" href="https://github.com/cartermburke/FMKT256-AI-Proj">github.com/cartermburke/FMKT256-AI-Proj</a>.</p>
+      <p>Built for Duke's FMKT 256 (Fall 2026) AI extra-credit project with Claude (Anthropic) as the AI pair-programmer: game design, engine, tests, data pipeline and this site. Source: <a id="repoLink" href="https://github.com/cartermburke/FMKT256-AI-Proj">github.com/cartermburke/FMKT256-AI-Proj</a>.</p>
       <p class="muted small">Academic exercise, not investment advice. Past performance on historical data says nothing about future results.</p>
     </section>
 
     <!-- DATA -->
     <section id="screen-data" class="screen prose" hidden>
       <h1>Data status</h1>
-      <p class="lede" id="dataLede">Loading…</p>
+      <p class="lede" id="dataLede">Loading</p>
       <div class="table-wrap">
         <table class="score" id="dataTable">
-          <thead><tr><th>Series</th><th>Source</th><th class="num">Rows</th><th>First</th><th>Last</th><th>Status</th></tr></thead>
+          <thead><tr><th scope="col">Series</th><th scope="col">Source</th><th class="num" scope="col">Rows</th><th scope="col">First</th><th scope="col">Last</th><th scope="col">Status</th></tr></thead>
           <tbody></tbody>
         </table>
       </div>
       <p id="dataLinks" class="small"></p>
       <h2>How updates work</h2>
-      <p>A GitHub Actions workflow (<code>.github/workflows/update-data.yml</code>) runs every weekday at 22:30 UTC (4:30pm CST), when the config changes, or on demand. It tries yfinance, then the Yahoo Finance chart API, then Nasdaq's historical API (and FRED for T-bills), validates every series, commits only changed files, and redeploys this site. If a source fails, the last good data is kept and this page flags it as stale.</p>
+      <p>A GitHub Actions workflow (<code>.github/workflows/update-data.yml</code>) runs every weekday at 22:30 UTC (4:30pm CST), when the config changes, or on demand. It tries yfinance, then the Yahoo Finance chart API, then Nasdaq's historical API (and FRED for T-bills), validates every series, and commits only changed files; the site redeploys from that commit. If a source fails, the last good data is kept and this page flags it as stale.</p>
     </section>
   </main>
 
   <footer class="footer">
     <span>Blind Tape · FMKT 256 AI project · built with Claude</span>
-    <span class="muted">Academic exercise, not investment advice.</span>
+    <span>Academic exercise, not investment advice.</span>
   </footer>
 
   <script type="module" src="app.js"></script>
