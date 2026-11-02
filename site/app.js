@@ -147,6 +147,7 @@ function ownSave() {
 
 function tabNote(text) {
   const n = $("tabNote");
+  if (!n.hidden && n.textContent === text) return; // already showing: don't announce it again
   n.hidden = false;
   n.textContent = text;
 }
@@ -166,6 +167,9 @@ function onStorage(e) {
 
 async function otherTabSaved() {
   if (S.replay) return;
+  // The event waited behind a game this tab started or opened since: storage now holds this
+  // tab's own save, so the event is out of date and this tab is the one that saves.
+  try { if (JSON.parse(load(SAVE_KEY))?.tab === TAB) return; } catch { /* unreadable: carry on */ }
   if (!S.game || (S.screen !== "game" && S.screen !== "results")) {
     S.game = null;
     await restoreSave({ keep: true });
@@ -255,8 +259,12 @@ async function routeNow(seq) {
   if (S.replay) { S.game = null; S.replay = false; }
   // A tab whose save was replaced elsewhere shows the saved game on the home screen, as a tab
   // already there does.
-  if (S.saveStale && !["#/play", "#/results", "#/how", "#/data"].includes(h)) S.game = null;
-  if (!S.game) await restoreSave();
+  if (S.saveStale && !["#/play", "#/results", "#/how", "#/data"].includes(h)) {
+    // The old game stays in memory (unsaved: saveStale blocks saveGame) until the saved one is
+    // in, so the game screen still showing while it loads never meets an empty game. The save
+    // is another tab's, so a failed load leaves it alone.
+    if (!(await restoreSave({ keep: true }))) S.game = null;
+  } else if (!S.game) await restoreSave();
   if (seq !== routeSeq) return; // a newer route is queued; it picks the screen
   if (h === "#/play" && S.game && !S.game.over) { show("game"); renderGame(true); return; }
   if ((h === "#/play" || h === "#/results") && S.game && S.game.over) {
@@ -456,6 +464,7 @@ async function setupGame(cfg) {
   $("errors").dataset.text = "";
   $("errors").innerHTML = "";
   clearTimeout(S.alertTimer);
+  cancelAnimationFrame(S.alertFrame);
   $("errorAlert").textContent = "";
   $("turnToast").dataset.last = "";
   $("turnToast").innerHTML = "";
@@ -679,7 +688,13 @@ function renderQuotes() {
 function addLeg(side, type, strike, notional) {
   if (S.legs.length >= RULES.maxLegs) {
     S.legNote = `You can trade at most ${RULES.maxLegs} option legs a month. Remove one first.`;
+    $("errors").dataset.last = ""; // a refused press is said every time, not only the first
     updateTicket();
+    // Empty the alert and fill it on the next frame, so the same words twice in a row are read again.
+    const a = $("errorAlert"), msg = a.textContent;
+    a.textContent = "";
+    cancelAnimationFrame(S.alertFrame);
+    S.alertFrame = requestAnimationFrame(() => { a.textContent = msg; });
     return;
   }
   S.legNote = "";
@@ -801,6 +816,7 @@ function updateTicket() {
   const key = errText.map((e) => e.replace(/[−+-]?[$]?[\d.,]+%?/g, "#")).join("|");
   if (errs.dataset.last !== key) {
     errs.dataset.last = key;
+    cancelAnimationFrame(S.alertFrame);
     $("errorAlert").textContent = errText.join(" ");
     // Emptied once read (emptying isn't announced), so the visible list is the only lasting
     // copy and browse mode doesn't meet each error twice with older numbers.
@@ -1011,7 +1027,7 @@ function renderResults() {
     const name = r.key === "you" ? "You" : esc(r.short);
     const rtd = x.busted || !Number.isFinite(x.retToDD) ? "–" : num(x.retToDD);
     const tot = change(x.totalReturn);
-    return `<tr class="${r.key === "you" ? "you" : r.key === "challenger" ? "ch" : ""}"><td class="num rank">${r.overall}${r.tiedWith.length ? '<span class="tie">tie</span>' : ""}</td><td class="name" title="${esc(r.label)}">${sw}${name}</td>
+    return `<tr class="${r.key === "you" ? "you" : r.key === "challenger" ? "ch" : ""}"><td class="num rank">${r.overall}${r.tiedWith.length ? '<span class="tie">tie</span>' : ""}</td><td class="name" title="${esc(r.label)}"><span class="name-in">${sw}<span>${name}</span></span></td>
       <td class="num">${sharpeTxt(x)}${chip(r.ranks.sharpe, "Sharpe")}</td><td class="num xs-hide">${rtd}${chip(r.ranks.retToDD, "return per drawdown")}</td>
       <td class="num">${pct(x.irr, 1, true)}${chip(r.ranks.irr, "IRR")}</td><td class="num">${pct(-x.maxDrawdown, 1)}</td>
       <td class="num opt">${money(x.finalValue)}</td><td class="num opt ${tot.cls}">${tot.text}</td>
@@ -1187,13 +1203,21 @@ async function attachChallenger(code) {
 }
 
 async function openChallenge(code, seq = routeSeq) {
+  // Opened from the game screen, the entry behind the link is that game's #/play: step back
+  // onto it, so history never holds two #/play entries in a row (the first Back would do nothing).
+  const fromGame = S.screen === "game";
   // Back to the link of the challenge being played (it stays in history when the player moved
-  // on while it loaded) carries on with that game instead of starting it again.
-  if (code === S.challengeCode && S.game) {
+  // on while it loaded) carries on with that game instead of starting it again. A finished one
+  // only does so from that leftover entry: opening its link again starts a new attempt.
+  if (code === S.challengeCode && S.game && (!S.game.over || history.state?.challenge)) {
     if (seq !== routeSeq) return;
     history.replaceState(null, "", "#/play");
+    if (fromGame && !S.game.over) { history.back(); return; }
     return routeNow(seq);
   }
+  // Mark the entry, so Back to it (if the player moves on while it loads) is told apart from
+  // opening the link again.
+  if (seq === routeSeq) history.replaceState({ challenge: true }, "");
   const saved = { cfg: S.cfg, market: S.market, spyMarket: S.spyMarket, game: S.game, actions: S.actions, benchmarks: S.benchmarks, replay: S.replay, challenger: S.challenger, challengeCode: S.challengeCode };
   try {
     const { cfg, actions } = decodeReplay(code);
@@ -1205,6 +1229,7 @@ async function openChallenge(code, seq = routeSeq) {
     saveGame();
     if (seq !== routeSeq) return; // the player has already moved on; the challenge is kept for Resume
     history.replaceState(null, "", "#/play");
+    if (fromGame) history.back();
     show("game");
     renderGame(true);
   } catch (e) {

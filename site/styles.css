@@ -259,6 +259,8 @@ details.help p + p { margin-top: 6px; }
   display: grid; gap: 16px 20px; align-items: start;
   grid-template-columns: minmax(0, 1fr) 420px;
   grid-template-areas: "status status" "price ticket" "account ticket";
+  /* A ticket taller than the two charts grows the last row, so the charts stay together. */
+  grid-template-rows: auto auto 1fr;
 }
 .game-status { grid-area: status; }
 .panel-price { grid-area: price; }
@@ -407,6 +409,14 @@ table { border-collapse: collapse; width: 100%; }
 .score tr.you td.name { box-shadow: inset 3px 0 0 var(--you); }
 /* A challenger can type a 20-character name: let it wrap rather than push Beta out of view. */
 .score tr.ch td.name { white-space: normal; }
+/* Keep its line key on the name's first line: a one-word name breaks inside the word instead. */
+@media (min-width: 701px) {
+  .score tr.ch .name-in { display: inline-flex; align-items: baseline; }
+  .score tr.ch .name-in .key { flex: none; }
+  .score tr.ch .name-in > span:last-child { overflow-wrap: anywhere; min-width: 7em; }
+}
+/* The same name heads a column of the head-to-head table: let it break so the table fits on phones. */
+#h2hBody th { overflow-wrap: anywhere; }
 .score td.rank { color: var(--ink-2); width: 1%; }
 .score.small td, .score.small th { padding: 6px 8px; font-size: 13px; }
 .rk { display: inline-block; margin-left: 6px; padding: 0 5px; border-radius: 6px; font-size: 10.5px; font-weight: 600; line-height: 16px; color: var(--ink-2); background: var(--surface-2); font-family: var(--font); vertical-align: 1px; }
@@ -490,7 +500,7 @@ details.block > summary { cursor: pointer; min-height: 36px; display: flex; alig
 }
 @media (max-width: 1023px) {
   .score .opt { display: none; }
-  .game-layout { grid-template-columns: minmax(0, 1fr); grid-template-areas: "status" "price" "ticket" "account"; }
+  .game-layout { grid-template-columns: minmax(0, 1fr); grid-template-rows: none; grid-template-areas: "status" "price" "ticket" "account"; }
   .ticket { position: static; max-height: none; overflow: visible; }
   .tiles { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .tile:nth-child(4) { border-left: 0; }

@@ -375,6 +375,16 @@ try {
     await ta.waitForFunction(() => !document.querySelector("#tabNote").hidden, null, { timeout: 4000 }).catch(() => {});
     const kept = await tb.evaluate(() => JSON.parse(localStorage.getItem("bt-save-v1") || "null"));
     check(kept && (await ta.textContent("#tabNote")).includes("newer market data"), "a tab with older data leaves another tab's save alone and asks for a reload");
+    // The note is said once: moving between screens doesn't rewrite (and so re-announce) it.
+    await ta.evaluate(() => {
+      window.__noteMuts = 0;
+      new MutationObserver((l) => { window.__noteMuts += l.length; }).observe(document.querySelector("#tabNote"), { childList: true, characterData: true, subtree: true, attributes: true });
+    });
+    for (const h of ["#/how", "#/data", "#/", "#/how", "#/"]) {
+      await ta.evaluate((x) => { location.hash = x; }, h);
+      await ta.waitForTimeout(150);
+    }
+    check((await ta.evaluate(() => window.__noteMuts)) === 0 && (await ta.textContent("#tabNote")).includes("newer market data"), "the newer-data note is said once, not again on every screen");
     await th.waitForTimeout(300);
     check(await th.isHidden("#tabNote"), "a tab with no game of its own doesn't say its game was changed");
     await tb.reload();
@@ -441,6 +451,197 @@ try {
     await mp.waitForSelector("#screen-game:not([hidden])", { timeout: 4000 }).catch(() => {});
     check(!(await mp.isHidden("#screen-game")), "Space on a home button works after leaving the reveal");
     await mc.close();
+  }
+
+  // (13) Fourth review: saves across tabs during a load, challenge links and history, repeated
+  // announcements, long one-word names, the chart gap on tall screens.
+  const saveOf = (pg) => pg.evaluate(() => {
+    const o = JSON.parse(localStorage.getItem("bt-save-v1") || "null");
+    if (!o) return null;
+    const d = JSON.parse(atob(o.code.replace(/-/g, "+").replace(/_/g, "/")));
+    return { tab: o.tab, sym: d.c.sym, n: d.a.length };
+  });
+  const playMonths = async (pg, n) => {
+    for (let i = 0; i < n; i++) {
+      const before = await pg.textContent("#sTurn");
+      await pg.waitForFunction(() => !document.querySelector("#nextTurn").disabled && document.querySelector("#nextTurn").getAttribute("aria-disabled") !== "true");
+      await pg.click("#nextTurn");
+      await pg.waitForFunction((b) => document.querySelector("#sTurn").textContent !== b, before);
+    }
+  };
+  const autopilot = async (pg, strat) => {
+    await pg.click(".autopilot summary");
+    if (strat) await pg.selectOption("#autoStrat", strat);
+    await pg.click("#autoRun");
+  };
+  {
+    // Play again while another tab saves during the load: the new game is this tab's, so it keeps saving.
+    const tabs = await browser.newContext({ viewport: { width: 1280, height: 800 }, reducedMotion: "reduce" });
+    const ta = await tabs.newPage();
+    ta.on("pageerror", (e) => errors.push(String(e)));
+    await ta.goto(`http://127.0.0.1:${PORT}/#/`);
+    await ta.click("#startQuick");
+    await ta.waitForSelector("#priceChart canvas");
+    await autopilot(ta);
+    await ta.waitForSelector("#resEquityChart canvas");
+    const first = (await saveOf(ta)).sym;
+    const tb = await tabs.newPage();
+    tb.on("pageerror", (e) => errors.push(String(e)));
+    await tb.goto(`http://127.0.0.1:${PORT}/#/`);
+    await tb.click("#startQuick");
+    await tb.waitForSelector("#priceChart canvas");
+    // Play again draws a stock tab A hasn't loaded, and its price file is slow to arrive.
+    await ta.evaluate(async (skip) => {
+      const { mulberry32, pick } = await import(new URL("engine/rng.js", location.href).href);
+      const m = await (await fetch("data/meta.json")).json();
+      const pool = (m.pool_info || m.pool.map((s) => ({ symbol: s }))).filter((p) => m.series[p.symbol.replace("^", "")]).map((p) => p.symbol);
+      let seed = 1;
+      while (skip.includes(pick(mulberry32(seed), pool))) seed++;
+      const orig = crypto.getRandomValues.bind(crypto);
+      crypto.getRandomValues = (a) => { crypto.getRandomValues = orig; a[0] = seed; return a; };
+    }, [first, "SPY", "^VIX", "^IRX"]);
+    await ta.route("**/data/prices/*.json", async (r) => { await new Promise((res) => setTimeout(res, 2500)); await r.continue(); });
+    await ta.click("#playAgain");
+    await ta.waitForTimeout(400);
+    await tb.click('.quick-btns button[data-x="100"]');
+    await playMonths(tb, 1);
+    await ta.waitForFunction(() => !document.querySelector("#screen-game").hidden && document.querySelector("#sTurn").textContent.startsWith("1 of 12"), null, { timeout: 8000 });
+    await ta.waitForTimeout(300);
+    await ta.unroute("**/data/prices/*.json");
+    await ta.click('.quick-btns button[data-x="100"]');
+    await playMonths(ta, 2);
+    const aNote = await ta.isHidden("#tabNote");
+    const aSave = await saveOf(ta);
+    await ta.reload();
+    await ta.waitForSelector("#priceChart canvas", { timeout: 5000 }).catch(() => {});
+    check(aNote && aSave.n === 2 && (await ta.textContent("#sTurn")).startsWith("3 of 12") && aSave.sym !== first,
+      "a game started while another tab saves keeps saving, and comes back on reload");
+    check(!(await tb.isHidden("#tabNote")), "the other tab is the one told its game was changed");
+    await tabs.close();
+  }
+  {
+    // A tab whose game was replaced elsewhere goes home while the saved game loads slowly;
+    // the game screen still showing works until then.
+    const tabs = await browser.newContext({ viewport: { width: 1280, height: 860 }, reducedMotion: "reduce" });
+    const own = [];
+    const ta = await tabs.newPage();
+    ta.on("pageerror", (e) => own.push(String(e)));
+    await ta.goto(`http://127.0.0.1:${PORT}/#/`);
+    await ta.evaluate(() => { const o = document.querySelector("#optTicker"); o.value = "KO"; o.dispatchEvent(new Event("change")); });
+    await ta.click("#startQuick");
+    await ta.waitForSelector("#priceChart canvas");
+    await playMonths(ta, 1);
+    const tb = await tabs.newPage();
+    tb.on("pageerror", (e) => errors.push(String(e)));
+    await tb.goto(`http://127.0.0.1:${PORT}/#/`);
+    await tb.evaluate(() => { const o = document.querySelector("#optTicker"); o.value = "UBER"; o.dispatchEvent(new Event("change")); });
+    await tb.click("#startQuick");
+    await tb.waitForSelector("#priceChart canvas");
+    await playMonths(tb, 1);
+    await ta.waitForFunction(() => !document.querySelector("#tabNote").hidden, null, { timeout: 4000 }).catch(() => {});
+    await ta.route("**/data/prices/UBER.json", async (r) => { await new Promise((res) => setTimeout(res, 2500)); await r.continue(); });
+    await ta.click('.nav a[data-nav="home"]');
+    await ta.waitForTimeout(300);
+    await ta.click("#addLeg", { timeout: 1000 }).catch(() => {});
+    const box = await ta.locator("#priceChart").boundingBox().catch(() => null);
+    if (box) for (let i = 0; i < 4; i++) await ta.mouse.move(box.x + 100 + i * 60, box.y + box.height / 2);
+    await ta.click("#nextTurn", { timeout: 1000 }).catch(() => {});
+    await ta.waitForSelector("#resumeCard:not([hidden])", { timeout: 6000 }).catch(() => {});
+    check(own.length === 0 && (await ta.textContent("#resumeText")).startsWith("Month 2 of 12"),
+      `the game screen still works while another tab's game loads (${own.length} errors)`);
+    for (const e of own) errors.push(e);
+    await tabs.close();
+  }
+  {
+    // A finished challenge's link opened again starts a new attempt; opened from a game, one Back leaves it.
+    const cc = await browser.newContext({ viewport: { width: 1280, height: 860 }, reducedMotion: "reduce" });
+    const cp = await cc.newPage();
+    cp.on("pageerror", (e) => errors.push(String(e)));
+    await cp.goto(`http://127.0.0.1:${PORT}/#/`);
+    await cp.waitForSelector("#homeData strong");
+    await cp.evaluate((u) => { location.href = u; }, longUrl);
+    await cp.waitForSelector("#priceChart canvas");
+    await autopilot(cp);
+    await cp.waitForSelector("#h2hCard:not([hidden])");
+    await cp.evaluate((u) => { location.href = u; }, longUrl);
+    await cp.waitForFunction(() => !document.querySelector("#screen-game").hidden, null, { timeout: 5000 }).catch(() => {});
+    check(!(await cp.isHidden("#screen-game")) && (await cp.textContent("#sTurn")).startsWith("1 of 12") && (await cp.evaluate(() => location.hash)) === "#/play",
+      "opening a finished challenge's link again starts a new attempt");
+    await cp.goto(`http://127.0.0.1:${PORT}/#/`);
+    await cp.click("#startQuick");
+    await cp.waitForSelector("#priceChart canvas");
+    await playMonths(cp, 1);
+    await cp.evaluate((u) => { location.href = u; }, longUrl);
+    await cp.waitForFunction(() => document.querySelector("#sTurn").textContent.startsWith("1 of 12"), null, { timeout: 5000 });
+    await cp.waitForTimeout(400);
+    await cp.goBack();
+    await cp.waitForTimeout(400);
+    check(!(await cp.isHidden("#screen-home")), "a challenge opened from a game leaves in one Back");
+    await cc.close();
+  }
+  // A second refused fifth leg is announced again.
+  await page.goto(`http://127.0.0.1:${PORT}/#/`);
+  await page.click("#startQuick");
+  await page.waitForSelector("#priceChart canvas");
+  for (let i = 0; i < 5; i++) {
+    await page.selectOption("#legSize", "0.1");
+    await page.click("#addLeg");
+  }
+  await page.waitForTimeout(100);
+  await page.evaluate(() => {
+    window.__said = [];
+    const a = document.querySelector("#errorAlert");
+    new MutationObserver(() => window.__said.push(a.textContent)).observe(a, { childList: true, characterData: true, subtree: true });
+  });
+  await page.click("#addLeg");
+  await page.waitForTimeout(200);
+  check((await page.evaluate(() => window.__said)).some((t) => t.includes("at most 4")), "a fifth leg refused again is announced again");
+  // A one-word 20-letter challenger name: the line key stays on the name's line, and every table fits.
+  await page.goto(`http://127.0.0.1:${PORT}/#/`);
+  await page.click("#startQuick");
+  await page.waitForSelector("#priceChart canvas");
+  await autopilot(page);
+  await page.waitForSelector("#resEquityChart canvas");
+  await page.fill("#challengeName", "Maximiliansschwarzer");
+  await page.click("#challengeBtn");
+  const wordUrl = await page.evaluate(() => navigator.clipboard.readText());
+  for (const vp of [{ width: 1024, height: 800 }, { width: 1101, height: 800 }, { width: 320, height: 700, mobile: true }, { width: 360, height: 760, mobile: true }]) {
+    const wc = await browser.newContext({ viewport: { width: vp.width, height: vp.height }, ...(vp.mobile ? { isMobile: true, hasTouch: true } : {}), reducedMotion: "reduce" });
+    const wp = await wc.newPage();
+    wp.on("pageerror", (e) => errors.push(String(e)));
+    await wp.goto(wordUrl);
+    await wp.waitForSelector("#priceChart canvas");
+    await autopilot(wp, "buyHold");
+    await wp.waitForSelector("#h2hCard:not([hidden])");
+    const m = await wp.evaluate(() => {
+      const fit = (t) => t.scrollWidth <= t.parentElement.clientWidth + 1;
+      const td = document.querySelector("#scoreTable tr.ch td.name");
+      const walk = document.createTreeWalker(td, NodeFilter.SHOW_TEXT, { acceptNode: (n) => (n.textContent.trim() ? 1 : 3) });
+      const r = document.createRange();
+      r.selectNodeContents(walk.nextNode());
+      const line = r.getClientRects()[0];
+      const k = td.querySelector(".key").getBoundingClientRect();
+      const mid = k.top + k.height / 2;
+      return { score: fit(document.querySelector("#scoreTable")), h2h: fit(document.querySelector("#h2hBody table")), keyOnLine: mid >= line.top - 1 && mid <= line.bottom + 1 };
+    });
+    if (vp.mobile) check(m.h2h, `head-to-head table with a long one-word name fits at ${vp.width}px`);
+    else check(m.score && m.h2h && m.keyOnLine, `long one-word challenger name keeps its line key and fits at ${vp.width}px`);
+    await wc.close();
+  }
+  // On a tall screen, the two charts stay together however tall the ticket is.
+  {
+    const gc = await browser.newContext({ viewport: { width: 1920, height: 1080 }, reducedMotion: "reduce" });
+    const gp = await gc.newPage();
+    gp.on("pageerror", (e) => errors.push(String(e)));
+    await gp.goto(`http://127.0.0.1:${PORT}/#/`);
+    await gp.click("#startQuick");
+    await gp.waitForSelector("#priceChart canvas");
+    await gp.click('.quick-btns button[data-x="100"]');
+    await playMonths(gp, 1);
+    await gp.waitForSelector("#equityChart canvas");
+    const gap = await gp.evaluate(() => document.querySelector(".panel-account").getBoundingClientRect().top - document.querySelector(".panel-price").getBoundingClientRect().bottom);
+    check(gap <= 17, `the price and account charts sit together on a 1920x1080 screen (gap ${Math.round(gap)}px)`);
+    await gc.close();
   }
 
   // How it works + data pages.

@@ -160,6 +160,33 @@ function drawEndLabels(u, spec) {
   ctx.restore();
 }
 
+/** Is the box (canvas pixels) clear of the trade markers and of every visible line? */
+function clearOf(u, spec, x0, x1, y0, y1) {
+  const pr = devicePixelRatio || 1;
+  const r = 5 * pr;
+  for (const m of spec.marks || []) {
+    const x = u.valToPos(m.x, "x", true);
+    const y = u.valToPos(m.y, "y", true);
+    if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
+    const my0 = m.up ? y + r * 2.2 : y - r * 3.9;
+    const my1 = m.up ? y + r * 3.9 : y - r * 2.2;
+    if (x + r + pr > x0 && x - r - pr < x1 && my1 + pr > y0 && my0 - pr < y1) return false;
+  }
+  const xs = u.data[0];
+  for (let si = 1; si < u.series.length; si++) {
+    if (!u.series[si].show) continue;
+    const ys = u.data[si];
+    for (let i = 0; i < xs.length; i++) {
+      if (ys[i] == null) continue;
+      const px = u.valToPos(xs[i], "x", true);
+      if (px < x0 - pr || px > x1 + pr) continue;
+      const py = u.valToPos(ys[i], "y", true);
+      if (py > y0 - pr && py < y1 + pr) return false;
+    }
+  }
+  return true;
+}
+
 /** Triangles on the price line where the player traded, plus an optional "Start" rule. */
 function drawMarks(u, spec) {
   const ctx = u.ctx;
@@ -180,12 +207,18 @@ function drawMarks(u, spec) {
     ctx.font = `${11 * pr}px ${cssVar("--font") || "system-ui"}`;
     ctx.textBaseline = "top";
     const tw = ctx.measureText(v.label).width;
-    // Label to the right of the rule, or to its left when it would run off the plot.
-    const lx = x + 4 * pr + tw > u.bbox.left + u.bbox.width ? x - 4 * pr - tw : x + 4 * pr;
+    // Label to the right of the rule, or to its left when it would run off the plot; at the top of
+    // the plot, or at the bottom when a trade marker or a line is in the way (its backing would
+    // hide the line, and a marker would cover the word).
+    const h = 15 * pr;
+    const right = u.bbox.left + u.bbox.width;
+    const sides = x + 4 * pr + tw > right ? [x - 4 * pr - tw] : [x + 4 * pr, x - 4 * pr - tw].filter((lx) => lx >= u.bbox.left);
+    const spots = [u.bbox.top, u.bbox.top + u.bbox.height - h].flatMap((ly) => sides.map((lx) => [lx, ly]));
+    const [lx, ly] = spots.find(([sx, sy]) => clearOf(u, spec, sx - 2 * pr, sx + tw + 2 * pr, sy, sy + h)) || spots[0];
     ctx.fillStyle = cssVar("--surface");
-    ctx.fillRect(lx - 2 * pr, u.bbox.top, tw + 4 * pr, 15 * pr);
+    ctx.fillRect(lx - 2 * pr, ly, tw + 4 * pr, h);
     ctx.fillStyle = cssVar("--muted");
-    ctx.fillText(v.label, lx, u.bbox.top + 2 * pr);
+    ctx.fillText(v.label, lx, ly + 2 * pr);
   }
   for (const m of spec.marks || []) {
     const x = u.valToPos(m.x, "x", true);
