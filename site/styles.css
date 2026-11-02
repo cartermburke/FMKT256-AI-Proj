@@ -379,8 +379,9 @@ table { border-collapse: collapse; width: 100%; }
 .beat .gain { color: var(--gain); font-weight: 600; } .beat .loss { color: var(--loss); font-weight: 600; }
 .ab-why { margin: 2px 0 0; font-size: 13px; color: var(--loss); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .ab-why:empty { display: none; }
-/* The footer clears the fixed action bar on the game screen, so it can always be read. */
-body:has(#screen-game:not([hidden])) .footer { margin-bottom: 76px; }
+/* The footer clears the fixed action bar on the game screen, so it can always be read: --ab-h is
+   the bar's measured height (it grows when a reason line or a wrapped button is shown). */
+body:has(#screen-game:not([hidden])) .footer { margin-bottom: var(--ab-h, 76px); }
 .btn-go { min-width: 220px; flex: none; }
 
 /* ---------- results ---------- */
@@ -561,7 +562,7 @@ details.block > summary { cursor: pointer; min-height: 36px; display: flex; alig
   .ab-sep { display: none; }
   .btn-go { order: 2; min-width: 0; max-width: none; flex: 0 1 auto; padding: 10px 16px; }
   #screen-game { padding-bottom: 150px; }
-  body:has(#screen-game:not([hidden])) .footer { margin-bottom: 118px; }
+  body:has(#screen-game:not([hidden])) .footer { margin-bottom: var(--ab-h, 152px); }
   html { scroll-padding-bottom: 140px; }
   /* Small labels stay at 12px or more on phones. */
   .rk, .tie, .quotes td.k .atm-tag, .badge { font-size: 12px; }
@@ -596,7 +597,9 @@ details.block > summary { cursor: pointer; min-height: 36px; display: flex; alig
 /* Touch screens wider than a phone (tablets) get the same 44px targets as phones. */
 @media (pointer: coarse) and (min-width: 701px) {
   .theme-toggle { width: 44px; height: 44px; }
-  .nav a, .toc a { min-height: 44px; display: inline-flex; align-items: center; }
+  .brand, .nav a, .toc a { min-height: 44px; display: inline-flex; align-items: center; }
+  .u-legend .u-series > * { vertical-align: middle; }
+  .u-legend .u-series + .u-series > * { padding-top: 12.5px; padding-bottom: 12.5px; }
   details.help > summary, .autopilot > summary, .options-panel > summary, details.block > summary { min-height: 44px; }
   .help-inline > summary { min-width: 44px; justify-content: center; }
   input[type="range"] { height: 44px; }

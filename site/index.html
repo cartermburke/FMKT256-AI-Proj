@@ -45,7 +45,7 @@
           <h1>Trade one stock for five years without knowing which stock it is.</h1>
           <p class="lede">Real prices, one month at a time, with calls and puts. The name comes off at the end.</p>
         </div>
-        <!-- A real tape: drawn from the S&P 500 ETF's last five years once the prices load. -->
+        <!-- A real tape: the S&P 500 ETF in the months before the game window, drawn once the prices load. -->
         <figure class="tape-demo" id="tapeDemo" aria-hidden="true">
           <div class="tape-head">
             <span class="tape-name"><span class="tape-redact"></span><span class="tape-reveal" id="tapeName">Revealed at the end</span></span>
@@ -275,7 +275,7 @@
           <h2>Scorecard</h2>
           <details class="help help-inline" id="scoreHelp">
             <summary aria-label="How the scorecard is ranked">?</summary>
-            <p>Every strategy is ranked on three numbers and ordered by the average of those ranks: Sharpe ratio, return per unit of drawdown (IRR above T-bills divided by max drawdown), and IRR. The small chip beside each value is its rank. Exact ties share a place. Every strategy pays the same costs on the same prices.</p>
+            <p>Every strategy is ranked on three numbers and ordered by the average of those ranks: Sharpe ratio, return per unit of drawdown (IRR above T-bills divided by max drawdown), and IRR. The small chip beside each value is its rank. Equal averages go to the higher Sharpe ratio, then the higher IRR; only exact ties share a place. Every strategy pays the same costs on the same prices.</p>
           </details>
         </div>
         <div class="table-wrap">
@@ -377,7 +377,7 @@
         <li><strong>Maximum drawdown.</strong> The largest fall from a peak in the daily account value.</li>
         <li><strong>IRR.</strong> The money-weighted return per year (XIRR). With a fixed stake it equals the compound annual growth rate.</li>
         <li><strong>Return per unit of drawdown.</strong> IRR above T-bills divided by max drawdown (floored at 1%).</li>
-        <li><strong>Overall place.</strong> Each strategy is ranked on Sharpe, return per unit of drawdown, and IRR, and ordered by the average rank; exact ties share a place. Drawdown enters per unit of return, so a tiny position can't win just by being small. A wiped-out account ranks last.</li>
+        <li><strong>Overall place.</strong> Each strategy is ranked on Sharpe, return per unit of drawdown, and IRR, and ordered by the average rank; equal averages go to the higher Sharpe, then the higher IRR, and only exact ties share a place. Drawdown enters per unit of return, so a tiny position can't win just by being small. A wiped-out account ranks last.</li>
         <li><strong>Also shown.</strong> Sortino ratio (excess return over downside deviation), volatility, and beta against the S&amp;P 500.</li>
       </ul>
 

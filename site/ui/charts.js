@@ -324,6 +324,15 @@ export function makeChart(spec) {
     }
     if (spec.marks || spec.vlines) opts.hooks.draw.push((u) => drawMarks(u, spec));
     if (spec.series.some((s) => s.endLabel)) opts.hooks.draw.push((u) => drawEndLabels(u, spec));
+    // Every legend toggle reports its line's state, also after uPlot's Ctrl/Cmd+click, which
+    // hides all the other lines at once.
+    if (spec.legendToggle) {
+      (opts.hooks.setSeries ||= []).push((u) => {
+        for (const th of u.root.querySelectorAll(".u-legend tr.u-series > th[role=button]")) {
+          th.setAttribute("aria-pressed", String(!th.parentElement.classList.contains("u-off")));
+        }
+      });
+    }
     chart.u = new uPlot(opts, spec.data, el);
     // Legend keys are short line samples in the series color and dash (identity never by text color).
     el.querySelectorAll(".u-legend .u-series").forEach((row, i) => {
@@ -344,9 +353,7 @@ export function makeChart(spec) {
         name.tabIndex = 0;
         name.setAttribute("role", "button");
         name.setAttribute("aria-label", `Show the ${s.label} line`);
-        const sync = () => name.setAttribute("aria-pressed", String(!row.classList.contains("u-off")));
-        sync();
-        name.addEventListener("click", sync); // runs after uPlot's own handler has toggled the line
+        name.setAttribute("aria-pressed", String(!row.classList.contains("u-off")));
         name.addEventListener("keydown", (e) => {
           if (e.key !== "Enter" && e.key !== " ") return;
           e.preventDefault();
