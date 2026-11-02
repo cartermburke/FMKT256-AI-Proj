@@ -1,5 +1,5 @@
-// Thin wrappers around uPlot that read colors from the CSS tokens, resize with their
-// container, and rebuild when the light/dark theme changes.
+// Thin wrappers around uPlot that read colors and fonts from the CSS tokens, resize with
+// their container, and rebuild when the theme changes or the web fonts finish loading.
 import uPlot from "../vendor/uPlot.esm.js";
 
 const registry = new Set();
@@ -8,12 +8,20 @@ export function cssVar(name) {
   return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 }
 
+/** A short line sample in a color and dash pattern, for legends and table keys. */
+export function lineKey(color, dash, { width = 22, stroke = 2.5 } = {}) {
+  const da = dash && dash.length ? ` stroke-dasharray="${dash.join(" ")}"` : "";
+  return `<svg class="line-key" width="${width}" height="6" viewBox="0 0 ${width} 6" aria-hidden="true" focusable="false"><line x1="0" y1="3" x2="${width}" y2="3" style="stroke:${color}" stroke-width="${stroke}"${da}/></svg>`;
+}
+
+const numFont = (px = 12) => `${px}px ${cssVar("--font-num") || "ui-monospace, monospace"}`;
+
 function axis(fmt, { side = 2, size } = {}) {
   // Only set keys we mean to override: an explicit `undefined` would wipe uPlot's defaults.
   const a = {
     side,
     stroke: cssVar("--axis"),
-    font: `12px ${cssVar("--font") || "system-ui"}`,
+    font: numFont(11),
     grid: { stroke: cssVar("--grid"), width: 1 },
     ticks: { stroke: cssVar("--grid"), width: 1, size: 4 },
     border: { show: side === 2, stroke: cssVar("--baseline"), width: 1 },
@@ -23,8 +31,12 @@ function axis(fmt, { side = 2, size } = {}) {
   return a;
 }
 
+function colorOf(s) {
+  return s.colorVar ? cssVar(s.colorVar) : s.color;
+}
+
 function seriesOpts(s) {
-  const color = s.colorVar ? cssVar(s.colorVar) : s.color;
+  const color = colorOf(s);
   const o = {
     label: s.label,
     stroke: color,
@@ -35,6 +47,7 @@ function seriesOpts(s) {
     points: { show: false },
   };
   if (s.dash) o.dash = s.dash;
+  if (s.alpha != null) o.alpha = s.alpha;
   if (s.fillAlpha) o.fill = hexA(color, s.fillAlpha);
   if (s.bars) {
     o.paths = uPlot.paths.bars({ size: [0.7, 24], radius: 0.15 });
@@ -65,22 +78,107 @@ function hexA(hex, a) {
   return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`;
 }
 
+function lastIndex(data) {
+  const xs = data[0] || [];
+  for (let i = xs.length - 1; i >= 0; i--) {
+    for (let s = 1; s < data.length; s++) if (data[s][i] != null) return i;
+  }
+  return xs.length ? xs.length - 1 : null;
+}
+
+/** Labels at the right end of each visible line, nudged apart so they never overlap. */
+function drawEndLabels(u, spec) {
+  const ctx = u.ctx;
+  const pr = devicePixelRatio || 1;
+  const labels = [];
+  spec.series.forEach((s, i) => {
+    const si = i + 1;
+    if (!u.series[si].show || !s.endLabel) return;
+    const ys = u.data[si];
+    let k = ys.length - 1;
+    while (k >= 0 && ys[k] == null) k--;
+    if (k < 0) return;
+    const y = u.valToPos(ys[k], "y", true);
+    if (!Number.isFinite(y)) return;
+    labels.push({ text: s.endLabel, y, color: colorOf(s), strong: !!s.strong });
+  });
+  labels.sort((a, b) => a.y - b.y);
+  const gap = 14 * pr;
+  for (let i = 1; i < labels.length; i++) if (labels[i].y - labels[i - 1].y < gap) labels[i].y = labels[i - 1].y + gap;
+  const x = u.bbox.left + u.bbox.width + 6 * pr;
+  ctx.save();
+  ctx.textBaseline = "middle";
+  ctx.textAlign = "left";
+  for (const l of labels) {
+    ctx.font = `${l.strong ? 600 : 400} ${11 * pr}px ${cssVar("--font") || "system-ui"}`;
+    ctx.fillStyle = l.strong ? l.color : cssVar("--ink-2");
+    ctx.fillText(l.text, x, l.y);
+  }
+  ctx.restore();
+}
+
+/** Triangles on the price line where the player traded, plus an optional "Start" rule. */
+function drawMarks(u, spec) {
+  const ctx = u.ctx;
+  const pr = devicePixelRatio || 1;
+  ctx.save();
+  ctx.textAlign = "left";
+  for (const v of spec.vlines || []) {
+    const x = u.valToPos(v.x, "x", true);
+    if (!Number.isFinite(x) || x < u.bbox.left - 1 || x > u.bbox.left + u.bbox.width + 1) continue;
+    ctx.strokeStyle = cssVar("--line-strong");
+    ctx.lineWidth = 1 * pr;
+    ctx.setLineDash([3 * pr, 3 * pr]);
+    ctx.beginPath();
+    ctx.moveTo(x, u.bbox.top);
+    ctx.lineTo(x, u.bbox.top + u.bbox.height);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.font = `${11 * pr}px ${cssVar("--font") || "system-ui"}`;
+    ctx.textBaseline = "top";
+    const tw = ctx.measureText(v.label).width;
+    ctx.fillStyle = cssVar("--surface");
+    ctx.fillRect(x + 2 * pr, u.bbox.top, tw + 5 * pr, 15 * pr);
+    ctx.fillStyle = cssVar("--muted");
+    ctx.fillText(v.label, x + 4 * pr, u.bbox.top + 2 * pr);
+  }
+  for (const m of spec.marks || []) {
+    const x = u.valToPos(m.x, "x", true);
+    const y = u.valToPos(m.y, "y", true);
+    if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
+    const r = 5 * pr;
+    ctx.fillStyle = cssVar(m.up ? "--long" : "--short");
+    ctx.strokeStyle = cssVar("--surface");
+    ctx.lineWidth = 2 * pr;
+    ctx.beginPath();
+    if (m.up) { ctx.moveTo(x, y + r * 2.2); ctx.lineTo(x - r, y + r * 3.9); ctx.lineTo(x + r, y + r * 3.9); }
+    else { ctx.moveTo(x, y - r * 2.2); ctx.lineTo(x - r, y - r * 3.9); ctx.lineTo(x + r, y - r * 3.9); }
+    ctx.closePath();
+    ctx.stroke();
+    ctx.fill();
+  }
+  ctx.restore();
+}
+
 /**
  * Create a chart.
- * spec = { el, height, xTime, xFmt, yFmt, yLog, series: [{label, colorVar, width, dash, fillAlpha, fmt, bars, show}],
- *          data: [xs, ys...], yRange?: [min,max] | fn, zeroLine?: bool, xLabelFmt?: fn for legend x }
+ * spec = { el, height (number | () => number), xTime, xFmt, yFmt, yLog, xIncrs, xRange, yRange, ySize,
+ *          series: [{label, colorVar, width, dash, alpha, fillAlpha, fmt, bars, show, endLabel, strong}],
+ *          data: [xs, ys...], zeroLine, xLabel, xLabelFmt, marks: [{x,y,up}], vlines: [{x,label}],
+ *          rightPad: px reserved for end labels, xSpace: min px between x ticks }
  */
 export function makeChart(spec) {
   const chart = { spec, u: null };
+  const heightOf = () => (typeof spec.height === "function" ? spec.height() : spec.height ?? 280);
   const build = () => {
     if (chart.u) chart.u.destroy();
     const el = spec.el;
     el.innerHTML = "";
-    const width = Math.max(260, el.clientWidth || 600);
+    const width = Math.max(240, el.clientWidth || 600);
     const opts = {
       width,
-      height: spec.height ?? 280,
-      padding: [10, 12, 0, 4],
+      height: heightOf(),
+      padding: [10, spec.rightPad ?? 22, 0, 4],
       scales: {
         x: spec.xRange ? { time: !!spec.xTime, range: () => spec.xRange() } : { time: !!spec.xTime },
         y: {
@@ -97,7 +195,7 @@ export function makeChart(spec) {
         },
       },
       axes: [
-        { ...axis(spec.xFmt ? (v) => spec.xFmt(v) : null, { side: 2 }), ...(spec.xIncrs ? { incrs: spec.xIncrs } : {}) },
+        { ...axis(spec.xFmt ? (v) => spec.xFmt(v) : null, { side: 2, size: spec.xTime ? 48 : 30 }), space: spec.xSpace ?? 50, ...(spec.xIncrs ? { incrs: spec.xIncrs } : {}) },
         { ...axis(spec.yFmt ?? null, { side: 3, size: spec.ySize ?? 56 }), ...(spec.yLog ? { splits: logSplits } : {}) },
       ],
       legend: { live: true, markers: { width: 0 } },
@@ -109,10 +207,18 @@ export function makeChart(spec) {
         { label: spec.xLabel ?? "", value: (u, v) => (v == null ? "–" : spec.xLabelFmt ? spec.xLabelFmt(v) : String(v)) },
         ...spec.series.map(seriesOpts),
       ],
-      hooks: {},
+      hooks: {
+        // Show the latest values in the legend whenever the pointer isn't on the chart.
+        ready: [(u) => { const i = lastIndex(u.data); if (i != null) u.setLegend({ idx: i }); }],
+        setCursor: [(u) => {
+          if (u.cursor.idx == null) { const i = lastIndex(u.data); if (i != null) u.setLegend({ idx: i }); }
+        }],
+        setData: [(u) => { const i = lastIndex(u.data); if (i != null && u.cursor.idx == null) u.setLegend({ idx: i }); }],
+        draw: [],
+      },
     };
     if (spec.zeroLine) {
-      opts.hooks.draw = [(u) => {
+      opts.hooks.draw.push((u) => {
         const y = u.valToPos(0, "y", true);
         if (!Number.isFinite(y)) return;
         const ctx = u.ctx;
@@ -124,26 +230,32 @@ export function makeChart(spec) {
         ctx.lineTo(u.bbox.left + u.bbox.width, y);
         ctx.stroke();
         ctx.restore();
-      }];
+      });
     }
+    if (spec.marks || spec.vlines) opts.hooks.draw.push((u) => drawMarks(u, spec));
+    if (spec.series.some((s) => s.endLabel)) opts.hooks.draw.push((u) => drawEndLabels(u, spec));
     chart.u = new uPlot(opts, spec.data, el);
-    // Color the legend markers as short line keys (identity never by text color).
+    // Legend keys are short line samples in the series color and dash (identity never by text color).
     el.querySelectorAll(".u-legend .u-series").forEach((row, i) => {
       if (i === 0) return;
       const s = spec.series[i - 1];
       const m = row.querySelector(".u-marker");
       if (m && s) {
-        const c = s.colorVar ? cssVar(s.colorVar) : s.color;
-        m.style.background = c;
-        m.style.border = "0";
+        m.className = "u-marker key-svg";
+        m.removeAttribute("style");
+        m.innerHTML = s.bars
+          ? `<svg class="line-key" width="12" height="10" aria-hidden="true"><rect width="12" height="10" rx="2" style="fill:${colorOf(s)}"/></svg>`
+          : lineKey(colorOf(s), s.dash, { stroke: Math.min(3, s.width ?? 2) });
       }
     });
   };
-  chart.update = (data) => {
+  chart.update = (data, extra = {}) => {
     spec.data = data;
+    Object.assign(spec, extra);
     if (chart.u) chart.u.setData(data);
     else build();
   };
+  chart.redraw = () => chart.u && chart.u.redraw();
   chart.rebuild = build;
   chart.destroy = () => {
     if (chart.u) chart.u.destroy();
@@ -153,8 +265,9 @@ export function makeChart(spec) {
   build();
   chart.ro = new ResizeObserver(() => {
     if (!chart.u) return;
-    const w = Math.max(260, spec.el.clientWidth);
-    if (Math.abs(w - chart.u.width) > 2) chart.u.setSize({ width: w, height: spec.height ?? 280 });
+    const w = Math.max(240, spec.el.clientWidth);
+    const h = heightOf();
+    if (Math.abs(w - chart.u.width) > 2 || h !== chart.u.height) chart.u.setSize({ width: w, height: h });
   });
   chart.ro.observe(spec.el);
   registry.add(chart);
@@ -163,4 +276,9 @@ export function makeChart(spec) {
 
 export function rebuildAll() {
   for (const c of registry) c.rebuild();
+}
+
+// Axes and labels are drawn on canvas with the web fonts, so redraw once they're ready.
+if (typeof document !== "undefined" && document.fonts && document.fonts.ready) {
+  document.fonts.ready.then(() => rebuildAll()).catch(() => {});
 }
