@@ -552,7 +552,7 @@ details.how-more > summary:hover { text-decoration: underline; text-underline-of
 .how-more-body > :last-child { margin-bottom: 0; }
 .prose .how-more h3 { font-size: 15px; font-weight: 600; margin: 16px 0 6px; color: var(--ink); }
 .prose .how-more h3 + p { margin-top: 0; }
-.how-fact { margin-top: 14px; padding: 10px 14px; border-radius: 9px; background: var(--surface-2); }
+.how-fact { margin-top: 14px; padding: 10px 14px; border-radius: 9px; background: var(--surface); border: 1px solid var(--line); }
 .prose .how-fact p { font-size: 14px; color: var(--ink-2); }
 .how-fact-label { display: block; font-size: 12.5px; font-weight: 700; color: var(--ink); margin-bottom: 2px; }
 /* Explain terms: short plain definitions after the jargon, only when the reader asks for them. */
@@ -686,7 +686,8 @@ details.how-more > summary:hover { text-decoration: underline; text-underline-of
   .switch-track::after { top: 2px; left: 2px; background: CanvasText; }
   .switch input:checked + .switch-track { background: Highlight; border-color: Highlight; }
   .switch input:checked + .switch-track::after { background: HighlightText; }
-  .how-seg button[aria-pressed="true"] { background: Highlight; color: HighlightText; }
+  /* No text backplate here: it would paint Canvas behind HighlightText and hide the label. */
+  .how-seg button[aria-pressed="true"] { forced-color-adjust: none; background: Highlight; color: HighlightText; outline-color: CanvasText; }
   .how-switch[aria-pressed="true"] .switch-track { background: Highlight; border-color: Highlight; }
   .how-switch[aria-pressed="true"] .switch-track::after { background: HighlightText; }
   .how-stats { gap: 0; }

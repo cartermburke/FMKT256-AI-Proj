@@ -1565,7 +1565,7 @@ function renderHowNumbers(failed = false) {
     ["Each turn", `${R.turnDays} days`, "Trading days, valued at every close"],
     ["Strikes", `${k.length}`, `${k[0]}% to ${k[k.length - 1]}% of the price, up to ${R.maxLegs} options a month`],
     ["Net exposure", `−${R.maxShort * 100}% to +${R.maxLong * 100}%`, "Stock plus option delta"],
-    ["Stock trade cost", `${R.stockCostBps / 100}%`, `Options cross a ${SPREAD.halfPct * 100}% half-spread`],
+    ["Stock trade cost", `${R.stockCostBps / 100}%`, `Option half-spread: ${SPREAD.halfPct * 100}% of the premium, at least ${SPREAD.minHalfOfSpot * 100}% of the price`],
     ["Benchmarks", `${Object.keys(STRATEGIES).length + 1}`, "Same prices, same costs"], // + the S&P 500's buy and hold
     ["Judged on", `${RANK_METRICS.length} metrics`, judged],
     ["Data through", m ? fmtDate(m.as_of) : "–",

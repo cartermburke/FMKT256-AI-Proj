@@ -237,7 +237,7 @@ story += bullets([
     "<b>Options without option data.</b> Free historical option chains don't exist, so every option is priced from that day's market: an at-the-money vol anchored to the VIX plus a volatility smile. We checked the model against the empirical evidence (delta-hedged option returns), not just intuition.",
     "<b>A score that can't be gamed.</b> The overall rank combines the prompt's three metrics. Drawdown enters per unit of return, so tiny positions can't win by being small. Every result sits beside six benchmark strategies on the same tape, and a rule-based coach explains what drove it.",
     "<b>Head-to-head with no server.</b> A challenge link carries the stock, the window and every order. A friend plays the same blind tape, and the two of you are ranked side by side.",
-    "<b>Built and audited by AI agents.</b> An AI panel scoped all three prompts and we picked prompt 1. Eight adversarial rounds then tried to break the game, its redesign and this submission, and every critical and major bug got a reproduction and a regression test (page 7).",
+    "<b>Built and audited by AI agents.</b> An AI panel scoped all three prompts and we picked prompt 1. Thirteen adversarial rounds then tried to break the game, its redesign and this submission, and every critical and major bug got a reproduction and a regression test (page 7).",
 ])
 story += [Spacer(1, 6), framed(img(SUB / "img" / "h2h.png", W - 8, max_h=2.1 * inch)),
           Spacer(1, 3), P("Head-to-head from a challenge link: the demo game's scripted player against a second player who let "

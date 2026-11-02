@@ -29,7 +29,7 @@ config/tickers.json ──► GitHub Actions: update-data (weekdays 22:30 UTC, o
                                validate: no gaps > 10 days, no NaN, ranges, split check, enough history
                                write site/data/prices/*.json + site/data/meta.json only if changed
                           └─ commit "data: refresh prices through <date>" ─► Vercel redeploys the site
-site/ (static) ──► loads data/*.json ──► the game window always ends at the latest close
+site/ (static) ──► loads data/*.json ──► a new full challenge always ends at the latest close
 ```
 
 - **Historical import:** the first run downloads about 7 years of daily adjusted closes for every stock, plus SPY, the VIX (^VIX) and the 13-week T-bill yield (^IRX).

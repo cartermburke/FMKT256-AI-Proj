@@ -1251,6 +1251,13 @@ try {
     const asOfText = new Date(`${asOf}T12:00:00Z`).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" });
     check(q.topics === 8 && q.shorts === 8 && q.folds >= 8 && q.open === 0 && q.defsShown === 0 && q.quick === "true" && q.terms === "false", `How it works opens as a quick tour: 8 summaries, every fold closed, no definitions (${q.open}/${q.folds} open, ${q.words} words)`);
     check(q.numbers.includes("$100,000") && q.numbers.includes("60 months") && q.numbers.includes(asOfText) && q.facts >= 3, `the numbers strip shows the rules and the live data date (${asOfText}), with "Did you know?" facts (${q.facts})`);
+    check(q.numbers.includes("of the premium, at least 0.05% of the price"), "the numbers strip states the option spread in full");
+    const box = await p.evaluate(() => {
+      const f = getComputedStyle(document.querySelector("#screen-how .how-fact"));
+      const page = getComputedStyle(document.body).backgroundColor;
+      return { border: parseFloat(f.borderTopWidth), bg: f.backgroundColor, page };
+    });
+    check(box.border >= 1 || box.bg !== box.page, `"Did you know?" boxes stand out from the page (border ${box.border}px, ${box.bg} on ${box.page})`);
     await p.click('[data-how-depth="full"]');
     await p.click("#howTerms");
     const f = await view();
@@ -1276,6 +1283,16 @@ try {
     }));
     check(ph.over <= 0 && ph.small === 0, `How it works on a 320px phone: no sideways scroll (${ph.over}px) and 44px controls (${ph.small} smaller)`);
     await m.c.close();
+    // In forced colors (high contrast) the chosen reading view keeps a readable label.
+    const hc = await fresh({ forcedColors: "active" });
+    await hc.p.goto(`http://127.0.0.1:${PORT}/#/how`);
+    await hc.p.waitForSelector("#screen-how:not([hidden])");
+    const seg = await hc.p.evaluate(() => {
+      const s = getComputedStyle(document.querySelector('[data-how-depth][aria-pressed="true"]'));
+      return { color: s.color, bg: s.backgroundColor, adjust: s.forcedColorAdjust };
+    });
+    check(seg.color !== seg.bg && seg.adjust === "none", `in forced colors the chosen reading view stays readable (${seg.color} on ${seg.bg})`);
+    await hc.c.close();
   });
 
   // How it works + data pages.
