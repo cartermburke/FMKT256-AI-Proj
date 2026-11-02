@@ -1,0 +1,72 @@
+name: update-data
+
+# Imports the full price history on first run and appends new closes every
+# weekday after the US market close. Also runs whenever the ticker config or
+# the fetcher changes, so adding a ticker needs no code changes.
+on:
+  schedule:
+    - cron: "30 22 * * 1-5"   # 4:30pm CST / 5:30pm EST, after the close
+  workflow_dispatch:
+  push:
+    paths:
+      - "config/**"
+      - "scripts/fetch_data.py"
+      - ".github/workflows/update-data.yml"
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: update-data
+  cancel-in-progress: false
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref_name }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install dependencies
+        run: pip install --quiet yfinance pandas requests
+      - name: Fetch and validate prices
+        env:
+          TIINGO_API_KEY: ${{ secrets.TIINGO_API_KEY }}
+        run: python scripts/fetch_data.py
+      - name: Commit new data (only if it changed)
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add site/data
+          if git diff --cached --quiet; then
+            echo "No new data."
+          else
+            AS_OF=$(python -c "import json;print(json.load(open('site/data/meta.json'))['as_of'])")
+            git commit -m "data: refresh prices through ${AS_OF}"
+            git pull --rebase origin "${GITHUB_REF_NAME}"
+            git push origin "HEAD:${GITHUB_REF_NAME}"
+          fi
+
+  # Pushes made with GITHUB_TOKEN don't trigger other workflows, so this job
+  # redeploys the site itself after a data refresh.
+  deploy:
+    needs: fetch
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref_name }}
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+      - id: deployment
+        uses: actions/deploy-pages@v4

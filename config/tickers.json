@@ -1,0 +1,23 @@
+{
+  "_comment": "Edit this file to change the game's stock pool. Add {symbol, name, regime} and push: the update-data workflow downloads the full history automatically. No code changes needed.",
+  "history_years": 7,
+  "game_years": 5,
+  "pool": [
+    {"symbol": "NVDA", "name": "NVIDIA", "regime": "AI moonshot"},
+    {"symbol": "INTC", "name": "Intel", "regime": "Long decline"},
+    {"symbol": "PYPL", "name": "PayPal", "regime": "De-rating"},
+    {"symbol": "MU",   "name": "Micron Technology", "regime": "Memory cycle"},
+    {"symbol": "TSLA", "name": "Tesla", "regime": "Wild swings"},
+    {"symbol": "KO",   "name": "Coca-Cola", "regime": "Low-vol defensive"},
+    {"symbol": "XOM",  "name": "Exxon Mobil", "regime": "Commodity boom"},
+    {"symbol": "CRWD", "name": "CrowdStrike", "regime": "High-vol growth"},
+    {"symbol": "DIS",  "name": "Walt Disney", "regime": "Sideways grind"},
+    {"symbol": "UBER", "name": "Uber Technologies", "regime": "Turnaround"},
+    {"symbol": "SPY",  "name": "SPDR S&P 500 ETF", "regime": "The market"}
+  ],
+  "benchmark": "SPY",
+  "aux": [
+    {"symbol": "^VIX", "file": "VIX", "name": "CBOE Volatility Index", "kind": "index"},
+    {"symbol": "^IRX", "file": "IRX", "name": "13-week T-bill yield (%)", "kind": "rate"}
+  ]
+}
