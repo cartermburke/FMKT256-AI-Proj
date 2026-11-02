@@ -60,6 +60,7 @@ ss = {
     "cellb": ParagraphStyle("cellb", fontName="Sans-Bold", fontSize=8.6, leading=11, textColor=INK),
     "formula": ParagraphStyle("formula", fontName="Sans", fontSize=11, leading=15, textColor=INK, alignment=1,
                               backColor=SURF, borderPadding=7, spaceBefore=4, spaceAfter=8),
+    "note": ParagraphStyle("note", fontName="Sans", fontSize=9.2, leading=12.6, textColor=INK2, spaceAfter=7),
     "link": ParagraphStyle("link", fontName="Sans", fontSize=9.4, leading=12.5, textColor=ACCENT_INK),
 }
 
@@ -222,14 +223,24 @@ story.append(PageBreak())
 
 # ----------------------------------------------------------------------------- page 2
 
-story += [P("Playing a month", "h1"),
-          P("The top bar leads with the account's value and return, then the month and net exposure. The price chart "
-            "shows up to a year before the start and every month played, with the 200-day average and a marker wherever "
-            "the player traded; the account's daily value runs below it, next to simply holding the stock. On the ticket, "
-            "set the stock position, then tap a bid to sell or an ask to buy options at five strikes. Every order is "
-            "checked first, the ticket shows each position before and after, and the bottom bar names the action "
-            "(\u201cTrade and go to month 10\u201d) and sums up the month just played."),
-          framed(img(SUB / "img" / "game.png", W - 8, max_h=3.6 * inch)), Spacer(1, 6),
+# A real capture of the game screen with notes beside it, so the text can point at each part.
+game_img = img(SUB / "img" / "game.png", W, max_h=4.4 * inch)
+game_notes = [
+    ("Top bar", "the account's value and return, then the month, net exposure and cash."),
+    ("Price chart", "up to a year before the start and every month played, with the 200-day average and a "
+                    "marker wherever the player traded."),
+    ("Your account", "its daily value, next to simply holding the stock."),
+    ("Ticket", "set the stock position, then tap a bid to sell or an ask to buy options at five strikes. Here the "
+               "player is long 100% and has just written a 105% call against it: a covered call."),
+    ("Before and after", "every order is checked first, and the ticket lists each position before and after it."),
+    ("Bottom bar", "names the action (\u201cTrade and go to month 10\u201d) and sums up the month just played."),
+]
+notes_col = [P("A blind full game at month 9.", "small"), Spacer(1, 4)] + [P(f"<b>{k}:</b> {v}", "note") for k, v in game_notes]
+game_row = Table([[framed(game_img), notes_col]], colWidths=[game_img.drawWidth + 8, W - game_img.drawWidth - 8])
+game_row.setStyle(TableStyle([("VALIGN", (0, 0), (-1, -1), "TOP"), ("LEFTPADDING", (0, 0), (0, 0), 0),
+                              ("LEFTPADDING", (1, 0), (1, 0), 12), ("RIGHTPADDING", (0, 0), (-1, -1), 0),
+                              ("TOPPADDING", (0, 0), (-1, -1), 0), ("BOTTOMPADDING", (0, 0), (-1, -1), 0)]))
+story += [P("Playing a month", "h1"), game_row, Spacer(1, 4),
           P("Rules", "h2")]
 story += bullets([
     "<b>Turns:</b> 21 trading days each; 60 turns for the full challenge, or a random 12-month slice in a quick round.",

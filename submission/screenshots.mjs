@@ -25,9 +25,9 @@ try {
   await page.waitForSelector("#homeData strong");
   await page.screenshot({ path: OUT + "home.png" });
 
-  // A blind full game at month 9, long 100% with a covered call just added from the quotes (the leg itself sits
-  // below the fold; the frame is kept short so it reads larger in the PDF).
-  await page.setViewportSize({ width: 1280, height: 880 });
+  // A blind full game at month 9, long 100% with a covered call just added from the quotes. The frame is tall
+  // enough to show the whole ticket: the leg, the before-and-after preview and the bottom bar.
+  await page.setViewportSize({ width: 1280, height: 1190 });
   await page.click("#startFull");
   await page.waitForSelector("#priceChart canvas");
   for (let i = 0; i < 8; i++) {
