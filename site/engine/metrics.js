@@ -34,16 +34,19 @@ export function excess(returns, rfDaily) {
 export function sharpe(returns, rfDaily) {
   const ex = excess(returns, rfDaily);
   const sd = stdev(ex);
-  if (!(sd > 0)) return NaN;
-  return (mean(ex) / sd) * Math.sqrt(TD);
+  const m = mean(ex);
+  // A riskless curve (e.g. T-bills only) has zero excess return: Sharpe 0, not noise.
+  if (!(sd > 1e-12)) return Math.abs(m) <= 1e-12 ? 0 : NaN;
+  return (m / sd) * Math.sqrt(TD);
 }
 
 /** Annualized Sortino ratio (downside deviation of excess returns, target 0). */
 export function sortino(returns, rfDaily) {
   const ex = excess(returns, rfDaily);
   const dd = Math.sqrt(mean(ex.map((x) => Math.min(0, x) ** 2)));
-  if (!(dd > 0)) return NaN;
-  return (mean(ex) / dd) * Math.sqrt(TD);
+  const m = mean(ex);
+  if (!(dd > 1e-12)) return Math.abs(m) <= 1e-12 ? 0 : NaN;
+  return (m / dd) * Math.sqrt(TD);
 }
 
 export function annualVol(returns) {

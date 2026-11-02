@@ -28,7 +28,7 @@ jobs:
           node-version: "22"
       - name: Engine unit tests
         run: |
-          if ls tests/*.test.mjs >/dev/null 2>&1; then node --test tests/; else echo "no tests yet"; fi
+          node --test tests/*.test.mjs
 
   deploy:
     needs: test

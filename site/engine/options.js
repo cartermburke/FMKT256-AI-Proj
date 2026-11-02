@@ -45,22 +45,28 @@ export function intrinsic(type, S, K) {
 
 export const IV_PARAMS = {
   window: 63,        // trading days of realized vol
-  ratioLo: 0.8,      // clip on VIX / SPY realized vol
-  ratioHi: 1.6,
+  minFracOfRv: 0.75, // implied never below 75% of the stock's own realized vol
   floor: 0.08,       // never price below 8% vol
   cap: 2.5,          // or above 250%
 };
 
 /**
  * Implied vol used to price options on the game stock on a given day:
- *   IV = RV63(stock) * clip(VIX / RV63(SPY), 0.8, 1.6)
- * The VIX/realized ratio is the market's own volatility risk premium on that day,
- * so option richness varies with market conditions instead of a fixed markup.
+ *
+ *   IV^2 = RV63(stock)^2 + [ (VIX/100)^2 - RV63(SPY)^2 ]
+ *
+ * The bracket is the market's own variance risk premium that day: what option buyers
+ * pay for S&P 500 volatility over what the index has actually been realizing. It is
+ * added once, in variance units, to the stock's realized variance. So index options
+ * (SPY) are priced exactly at the VIX, low-vol stocks carry a noticeable premium, and
+ * high-vol single stocks carry a small one, which matches the empirical finding that
+ * the volatility risk premium is concentrated in index options.
  */
 export function impliedVol(rvStock, rvSpy, vixLevel, p = IV_PARAMS) {
-  const ratioRaw = rvSpy > 0 ? (vixLevel / 100) / rvSpy : 1;
-  const ratio = Math.min(p.ratioHi, Math.max(p.ratioLo, ratioRaw));
-  return Math.min(p.cap, Math.max(p.floor, rvStock * ratio));
+  const v2 = rvStock * rvStock + (vixLevel / 100) ** 2 - rvSpy * rvSpy;
+  const lo = p.minFracOfRv * rvStock;
+  const iv = Math.sqrt(Math.max(v2, lo * lo));
+  return Math.min(p.cap, Math.max(p.floor, iv));
 }
 
 export const SPREAD = {

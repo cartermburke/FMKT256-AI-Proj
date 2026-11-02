@@ -170,7 +170,8 @@ export class Game {
     if (putCollateral > Math.max(0, free) * (1 + 1e-7) + EPS) {
       errors.push("Written puts must be cash-secured by equity not already in the stock.");
     }
-    if (cash < -R.maxBorrowFrac * E - EPS) {
+    // Trading costs don't count against buying power (so 150% long is reachable).
+    if (cash + costs < -R.maxBorrowFrac * E - 1e-6) {
       errors.push(`Not enough buying power: borrowing is capped at ${R.maxBorrowFrac * 100}% of equity.`);
     }
     return {
